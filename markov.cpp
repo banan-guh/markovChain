@@ -151,7 +151,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
     }
     if (current_state.empty()) break;
   }
-  return (word_counter == 0) ? "uuh" : result;
+  return result;
 }
 
 void Markov::train(std::string raw_message, int max_order) {
