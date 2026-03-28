@@ -106,15 +106,10 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
     std::string result = "";
     std::vector<int> rev_state(o, START);
     std::stringstream ss2(sanitize(seed));
-    std::vector<int> seed_ids;
     std::string w2;
     while (ss2 >> w2) {
-      if (word_to_id.find(w2) != word_to_id.end())
-        seed_ids.push_back(word_to_id[w2]);
-    }
-    std::reverse(seed_ids.begin(), seed_ids.end());
-    for (int id : seed_ids) {
-      rev_state.push_back(id);
+      if (word_to_id.find(w2) == word_to_id.end()) continue;
+      rev_state.push_back(word_to_id[w2]);
       if (rev_state.size() > o) rev_state.erase(rev_state.begin());
     }
     for (int i = 0; i < c; i++) {
