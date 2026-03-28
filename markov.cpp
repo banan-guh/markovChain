@@ -69,7 +69,7 @@ std::string Markov::sanitize(std::string raw) {
   return clean;
 }
 
-std::string Markov::generate(int o, bool w, int c, bool q, bool r, bool f) {
+std::string Markov::generate(int o, bool w, int c, bool r, bool f) {
   std::vector<int> current_state(o, START);
   int word_counter = 0;
   std::string result = "";
@@ -81,6 +81,43 @@ std::string Markov::generate(int o, bool w, int c, bool q, bool r, bool f) {
 
     if (w) next_id = pick_weighted(options, f);
     else next_id = pick_random(options, f);
+
+    if (f && (next_id == END || next_id == -1)) {
+      next_id = 2 + (rand() % (vocabulary.size() - 2));
+    }
+    else if (next_id == END || next_id == -1) break;
+
+    result += vocabulary[next_id] + " ";
+    word_counter++;
+    current_state.push_back(next_id);
+    if (current_state.size() > o) current_state.erase(current_state.begin());
+
+    while (memory.find(current_state) == memory.end() && !current_state.empty()) {
+      current_state.erase(current_state.begin());
+    }
+    if (current_state.empty()) break;
+  }
+  return (word_counter == 0) ? "uuh" : result;
+}
+
+std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool f) {
+  std::stringstream ss(sanitize(seed));
+  std::string word;
+  std::vector<int> current_state(o, START);
+
+  while (ss >> word) {
+    if (word_to_id.find(word) == word_to_id.end()) continue;
+    current_state.push_back(word_to_id[word]);
+    if (current_state.size() > o) current_state.erase(current_state.begin());
+  }
+
+  int word_counter = 0;
+  std::string result = "";
+
+  for (int i = 0; i < c; i++) {
+    if (memory.find(current_state) == memory.end()) break;
+    std::map<int, int>& options = memory[current_state];
+    int next_id = w ? pick_weighted(options, f) : pick_random(options, f);
 
     if (f && (next_id == END || next_id == -1)) {
       next_id = 2 + (rand() % (vocabulary.size() - 2));
