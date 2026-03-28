@@ -29,6 +29,7 @@ public:
   void train_from_file(std::string filename, int o);
   void save_brain(std::string folder);
   void load_brain(std::string folder);
+  void purge(std::vector<std::string> blocked_words);
 };
 
 #endif

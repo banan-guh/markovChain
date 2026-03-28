@@ -280,3 +280,48 @@ void Markov::load_brain(std::string folder) {
   }
   rmem_file.close();
 }
+
+void Markov::purge(std::vector<std::string> blocked_words) {
+  std::vector<int> blocked_ids;
+  for (const auto& word : blocked_words) {
+    if (word_to_id.find(word) != word_to_id.end()) {
+      blocked_ids.push_back(word_to_id[word]);
+    }
+  }
+  if (blocked_ids.empty()) return;
+
+  auto is_blocked = [&](int id) {
+    return std::find(blocked_ids.begin(), blocked_ids.end(), id) != blocked_ids.end();
+    };
+
+  for (auto it = memory.begin(); it != memory.end();) {
+    bool bad = false;
+    for (int id : it->first) if (is_blocked(id)) { bad = true; break; }
+    if (bad) { it = memory.erase(it); continue; }
+    for (auto sit = it->second.begin(); sit != it->second.end();) {
+      if (is_blocked(sit->first)) sit = it->second.erase(sit);
+      else ++sit;
+    }
+    ++it;
+  }
+
+  for (auto it = reverse_memory.begin(); it != reverse_memory.end();) {
+    bool bad = false;
+    for (int id : it->first) if (is_blocked(id)) { bad = true; break; }
+    if (bad) { it = reverse_memory.erase(it); continue; }
+    for (auto sit = it->second.begin(); sit != it->second.end();) {
+      if (is_blocked(sit->first)) sit = it->second.erase(sit);
+      else ++sit;
+    }
+    ++it;
+  }
+
+  for (const auto& word : blocked_words) {
+    if (word_to_id.find(word) != word_to_id.end()) {
+      int id = word_to_id[word];
+      vocabulary[id] = "uuh";
+      word_to_id.erase(word);
+      word_to_id["uuh"] = id;
+    }
+  }
+}
