@@ -88,7 +88,7 @@ std::string Markov::generate(int o, bool w, int c, bool r, bool f) {
     }
     if (current_state.empty()) break;
   }
-  return (word_counter == 0) ? "uuh" : result;
+  return result;
 }
 
 std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool r, bool f) {
@@ -104,32 +104,53 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
   if (r) {
     int word_counter = 0;
     std::string result = "";
-    std::vector<int> rev_state(o, START);
+
+    // get tokens for the seed in reverse order to match training
     std::stringstream ss2(sanitize(seed));
     std::string w2;
+    std::vector<int> seed_tokens;
     while (ss2 >> w2) {
-      if (word_to_id.find(w2) == word_to_id.end()) continue;
-      rev_state.push_back(word_to_id[w2]);
+      if (word_to_id.find(w2) != word_to_id.end()) {
+        seed_tokens.push_back(word_to_id[w2]);
+      }
+    }
+
+    if (seed_tokens.empty()) return "uuh";
+    std::reverse(seed_tokens.begin(), seed_tokens.end());
+
+    // initialize state with STARTs, then push the reversed seed tokens
+    std::vector<int> rev_state(o, START);
+    for (int id : seed_tokens) {
+      rev_state.push_back(id);
       if (rev_state.size() > o) rev_state.erase(rev_state.begin());
     }
+
     for (int i = 0; i < c; i++) {
       if (reverse_memory.find(rev_state) == reverse_memory.end()) break;
+
       std::map<int, int>& options = reverse_memory[rev_state];
       int next_id = w ? pick_weighted(options, f) : pick_random(options, f);
+
       if (f && (next_id == END || next_id == -1)) {
         next_id = 2 + (rand() % (vocabulary.size() - 2));
       }
-      else if (next_id == END || next_id == -1) break;
+      else if (next_id == END || next_id == -1) {
+        break;
+      }
+
       result = vocabulary[next_id] + " " + result;
       word_counter++;
+
       rev_state.push_back(next_id);
       if (rev_state.size() > o) rev_state.erase(rev_state.begin());
+
+      // back-off logic
       while (reverse_memory.find(rev_state) == reverse_memory.end() && !rev_state.empty()) {
         rev_state.erase(rev_state.begin());
       }
       if (rev_state.empty()) break;
     }
-    return (word_counter == 0) ? "uuh" : result + seed + " ";
+    return (word_counter == 0) ? seed + " " : result + seed + " ";
   }
 
   int word_counter = 0;
