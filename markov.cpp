@@ -105,25 +105,27 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
     int word_counter = 0;
     std::string result = "";
 
-    // get tokens for the seed in reverse order to match training
-    std::stringstream ss2(sanitize(seed));
-    std::string w2;
-    std::vector<int> seed_tokens;
-    while (ss2 >> w2) {
-      if (word_to_id.find(w2) != word_to_id.end()) {
-        seed_tokens.push_back(word_to_id[w2]);
+    // 1. clean and get the seed id
+    std::string clean_seed = sanitize(seed);
+    if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuh";
+    int seed_id = word_to_id[clean_seed];
+
+    // 2. build the initial state. 
+    // we want to find ANY prefix that ends with our seed_id.
+    std::vector<int> rev_state;
+    bool found_start = false;
+
+    // search reverse_memory for any key that ends with our seed_id
+    for (auto const& pair : reverse_memory) {
+      const std::vector<int>& state_vec = pair.first;
+      if (!state_vec.empty() && state_vec.back() == seed_id) {
+        rev_state = state_vec;
+        found_start = true;
+        break;
       }
     }
 
-    if (seed_tokens.empty()) return "uuh";
-    std::reverse(seed_tokens.begin(), seed_tokens.end());
-
-    // initialize state with STARTs, then push the reversed seed tokens
-    std::vector<int> rev_state(o, START);
-    for (int id : seed_tokens) {
-      rev_state.push_back(id);
-      if (rev_state.size() > o) rev_state.erase(rev_state.begin());
-    }
+    if (!found_start) return seed + " "; // fallback if seed never appeared in a context
 
     for (int i = 0; i < c; i++) {
       if (reverse_memory.find(rev_state) == reverse_memory.end()) break;
@@ -131,12 +133,14 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
       std::map<int, int>& options = reverse_memory[rev_state];
       int next_id = w ? pick_weighted(options, f) : pick_random(options, f);
 
-      if (f && (next_id == END || next_id == -1)) {
+      // stop if we hit START (which is the beginning of the original sentence)
+      if (next_id == START || next_id == -1) break;
+
+      // handle forced mode
+      if (f && next_id == END) {
         next_id = 2 + (rand() % (vocabulary.size() - 2));
       }
-      else if (next_id == END || next_id == -1) {
-        break;
-      }
+      else if (next_id == END) break;
 
       result = vocabulary[next_id] + " " + result;
       word_counter++;
@@ -144,7 +148,6 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
       rev_state.push_back(next_id);
       if (rev_state.size() > o) rev_state.erase(rev_state.begin());
 
-      // back-off logic
       while (reverse_memory.find(rev_state) == reverse_memory.end() && !rev_state.empty()) {
         rev_state.erase(rev_state.begin());
       }
