@@ -357,52 +357,76 @@ void Markov::save_brain(std::string folder) {
   rmem_file.close();
 }
 
-void Markov::load_brain(std::string folder) {
-  vocabulary.clear();
-  word_to_id.clear();
-  std::ifstream vocab_file(folder + "/vocab.txt");
-  std::string word;
-  while (std::getline(vocab_file, word)) {
-    int id = vocabulary.size();
-    vocabulary.push_back(word);
-    word_to_id[word] = id;
-  }
-  vocab_file.close();
+// Helper function to check if a file exists
+bool file_exists(const std::string& name) {
+    struct stat buffer;   
+    return (stat(name.c_str(), &buffer) == 0); 
+}
 
-  memory.clear();
-  std::ifstream mem_file(folder + "/memory.dat");
-  int prefix_size, suffix_count;
-  while (mem_file >> prefix_size) {
-    std::vector<int> prefix;
-    for (int i = 0; i < prefix_size; i++) {
-      int id; mem_file >> id;
-      prefix.push_back(id);
-    }
-    mem_file >> suffix_count;
-    for (int i = 0; i < suffix_count; i++) {
-      int s_id, count;
-      mem_file >> s_id >> count;
-      memory[prefix][s_id] = count;
-    }
-  }
-  mem_file.close();
+bool Markov::load_brain(const std::string& folder_path) {
+    std::string v_path = folder_path + "/vocab.txt";
+    std::string b_path = folder_path + "/brain.dat";
+    std::string m_path = folder_path + "/memory.dat";
+    std::string rm_path = folder_path + "/reverse_memory.dat";
 
-  reverse_memory.clear();
-  std::ifstream rmem_file(folder + "/reverse_memory.dat");
-  while (rmem_file >> prefix_size) {
-    std::vector<int> prefix;
-    for (int i = 0; i < prefix_size; i++) {
-      int id; rmem_file >> id;
-      prefix.push_back(id);
+    // Strict Guard: No vocab.txt = No run.
+    if (!file_exists(v_path)) return false;
+
+    // Case 1: brain.dat exists (Fast Path)
+    if (file_exists(b_path)) {
+        std::ifstream in(b_path, std::ios::binary);
+        if (!in) return false;
+
+        unsigned int vocab_size;
+        in.read(reinterpret_cast<char*>(&vocab_size), sizeof(vocab_size));
+        vocab.clear(); word_to_id.clear();
+        for (unsigned int i = 0; i < vocab_size; ++i) {
+            unsigned int len; in.read(reinterpret_cast<char*>(&len), sizeof(len));
+            std::string w(len, '\0'); in.read(&w[0], len);
+            vocab.push_back(w); word_to_id[w] = i;
+        }
+
+        auto load_bin = [&](auto& matrix) {
+            unsigned int m_size; in.read(reinterpret_cast<char*>(&m_size), sizeof(m_size));
+            matrix.clear();
+            for (unsigned int i = 0; i < m_size; ++i) {
+                unsigned int p_size; in.read(reinterpret_cast<char*>(&p_size), sizeof(p_size));
+                std::vector<int> pref(p_size);
+                for (unsigned int j = 0; j < p_size; ++j) in.read(reinterpret_cast<char*>(&pref[j]), sizeof(int));
+                unsigned int s_cnt; in.read(reinterpret_cast<char*>(&s_cnt), sizeof(s_cnt));
+                for (unsigned int j = 0; j < s_cnt; ++j) {
+                    int sid, cnt; in.read(reinterpret_cast<char*>(&sid), sizeof(sid));
+                    in.read(reinterpret_cast<char*>(&cnt), sizeof(cnt));
+                    matrix[pref][sid] = cnt;
+                }
+            }
+        };
+        load_bin(memory); load_bin(reverse_memory);
+        return true;
     }
-    rmem_file >> suffix_count;
-    for (int i = 0; i < suffix_count; i++) {
-      int s_id, count;
-      rmem_file >> s_id >> count;
-      reverse_memory[prefix][s_id] = count;
+
+    // Case 2: Fallback to memory.dat and reverse_memory.dat
+    if (file_exists(m_path) && file_exists(rm_path)) {
+        std::ifstream vf(v_path); std::string line;
+        vocab.clear(); word_to_id.clear();
+        while (std::getline(vf, line)) {
+            if (!line.empty()) { vocab.push_back(line); word_to_id[line] = vocab.size() - 1; }
+        }
+
+        auto load_txt = [&](const std::string& path, auto& matrix) {
+            std::ifstream f(path); int p_size, s_count, pid, sid, count;
+            while (f >> p_size) {
+                std::vector<int> pref;
+                for (int i = 0; i < p_size; ++i) { f >> pid; pref.push_back(pid); }
+                f >> s_count;
+                for (int i = 0; i < s_count; ++i) { f >> sid >> count; matrix[pref][sid] = count; }
+            }
+        };
+        load_txt(m_path, memory); load_txt(rm_path, reverse_memory);
+        this->save(folder_path); // Generates your brain.dat
+        return true;
     }
-  }
-  rmem_file.close();
+    return false;
 }
 
 void Markov::purge(std::vector<std::string> blocked_words) {
