@@ -17,20 +17,35 @@ Markov::Markov() {
   word_to_id["[END]"] = END;
 }
 
-int Markov::pick_weighted(std::map<int, int>& options, bool f) {
+// FIXED: Added double damping to the implementation signature and internal loop math
+int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
   int total = 0;
   for (auto const& pair : options) {
     if (f && pair.first == END && options.size() > 1) continue;
-    total += pair.second;
+    
+    // Apply damping to both structural termination flags
+    if (pair.first == END || pair.first == START) {
+      total += std::max(1, static_cast<int>(pair.second * damping));
+    } else {
+      total += pair.second;
+    }
   }
   if (total <= 0) return END;
+
   std::uniform_int_distribution<int> dist(0, total - 1);
   static std::mt19937 gen(std::chrono::system_clock::now().time_since_epoch().count());
   int roll = dist(gen);
+
   for (auto const& pair : options) {
     if (f && pair.first == END && options.size() > 1) continue;
-    if (roll < pair.second) return pair.first;
-    roll -= pair.second;
+    
+    int current_weight = pair.second;
+    if (pair.first == END || pair.first == START) {
+      current_weight = std::max(1, static_cast<int>(pair.second * damping));
+    }
+
+    if (roll < current_weight) return pair.first;
+    roll -= current_weight;
   }
   return END;
 }
@@ -65,57 +80,130 @@ std::string Markov::sanitize(std::string raw) {
   return clean;
 }
 
-std::string Markov::generate(int o, bool w, int c, bool r, bool f) {
+std::string Markov::generate(int o, bool w, int c, bool r, bool f, double damping, double context_entropy) {
   std::vector<int> current_state(o, START);
   int word_counter = 0;
   std::string result = "";
   for (int i = 0; i < c; i++) {
-    if (memory.find(current_state) == memory.end()) break;
-    std::map<int, int>& options = memory[current_state];
-    int next_id = -1;
-    if (w) next_id = pick_weighted(options, f);
-    else next_id = pick_random(options, f);
-    if (f && (next_id == END || next_id == -1)) {
-      next_id = 2 + (rand() % (vocabulary.size() - 2));
+    
+    // --- DYNAMIC CONTEXT MIXING ---
+    if (current_state.size() > 1 && ((double)rand() / RAND_MAX) < context_entropy) {
+      current_state.erase(current_state.begin());
     }
-    else if (next_id == END || next_id == -1) break;
-    result += vocabulary[next_id] + " ";
-    word_counter++;
-    current_state.push_back(next_id);
-    if (current_state.size() > o) current_state.erase(current_state.begin());
+
     while (memory.find(current_state) == memory.end() && !current_state.empty()) {
       current_state.erase(current_state.begin());
     }
     if (current_state.empty()) break;
+
+    std::map<int, int>& options = memory[current_state];
+    int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f);
+    
+    if (f && (next_id == END || next_id == -1)) {
+      next_id = 2 + (rand() % (vocabulary.size() - 2));
+    }
+    else if (next_id == END || next_id == -1) break;
+
+    result += vocabulary[next_id] + " ";
+    word_counter++;
+    
+    current_state.push_back(next_id);
+    if (current_state.size() > o) current_state.erase(current_state.begin());
   }
   return result;
 }
 
-std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool r, bool f) {
-  std::stringstream ss(sanitize(seed));
-  std::string word;
-  std::vector<int> current_state(o, START);
-  while (ss >> word) {
-    if (word_to_id.find(word) == word_to_id.end()) continue;
-    current_state.push_back(word_to_id[word]);
-    if (current_state.size() > o) current_state.erase(current_state.begin());
+std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool r, bool infix, bool f, double damping, double context_entropy) {
+  std::string clean_seed = sanitize(seed);
+  
+  // ==========================================
+  // BRANCH 1: INFIX GENERATION (-i flag)
+  // ==========================================
+  if (infix) {
+    if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuh";
+    int seed_id = word_to_id[clean_seed];
+    
+    std::string backward_part = "";
+    std::string forward_part = "";
+    int half_count = c / 2;
+
+    // 1. Backward Path (Left Side)
+    std::vector<int> rev_state;
+    for (auto const& pair : reverse_memory) {
+      if (!pair.first.empty() && pair.first.back() == seed_id) { 
+        rev_state = pair.first; 
+        break; 
+      }
+    }
+    if (!rev_state.empty()) {
+      for (int i = 0; i < half_count; i++) {
+        // Context Entropy Check
+        if (rev_state.size() > 1 && ((double)rand() / RAND_MAX) < context_entropy) {
+          rev_state.erase(rev_state.begin());
+        }
+        while (reverse_memory.find(rev_state) == reverse_memory.end() && !rev_state.empty()) {
+          rev_state.erase(rev_state.begin());
+        }
+        if (rev_state.empty()) break;
+
+        std::map<int, int>& options = reverse_memory[rev_state];
+        int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f);
+        
+        if (next_id == START || next_id == -1) break;
+        if (f && next_id == END) next_id = 2 + (rand() % (vocabulary.size() - 2));
+        else if (next_id == END) break;
+
+        backward_part = vocabulary[next_id] + " " + backward_part;
+        rev_state.push_back(next_id);
+        if (rev_state.size() > o) rev_state.erase(rev_state.begin());
+      }
+    }
+
+    // 2. Forward Path (Right Side)
+    std::vector<int> fwd_state;
+    for (auto const& pair : memory) {
+      if (!pair.first.empty() && pair.first.back() == seed_id) { 
+        fwd_state = pair.first; 
+        break; 
+      }
+    }
+    if (!fwd_state.empty()) {
+      for (int i = 0; i < half_count; i++) {
+        // Context Entropy Check
+        if (fwd_state.size() > 1 && ((double)rand() / RAND_MAX) < context_entropy) {
+          fwd_state.erase(fwd_state.begin());
+        }
+        while (memory.find(fwd_state) == memory.end() && !fwd_state.empty()) {
+          fwd_state.erase(fwd_state.begin());
+        }
+        if (fwd_state.empty()) break;
+
+        std::map<int, int>& options = memory[fwd_state];
+        int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f);
+        
+        if (next_id == END || next_id == -1) break;
+        if (f && next_id == END) next_id = 2 + (rand() % (vocabulary.size() - 2));
+
+        forward_part += vocabulary[next_id] + " ";
+        fwd_state.push_back(next_id);
+        if (fwd_state.size() > o) fwd_state.erase(fwd_state.begin());
+      }
+    }
+    return backward_part + clean_seed + " " + forward_part;
   }
 
+  // ==========================================
+  // BRANCH 2: STANDARD REVERSE GENERATION (-r flag)
+  // ==========================================
   if (r) {
     int word_counter = 0;
     std::string result = "";
-
-    // 1. clean and get the seed id
-    std::string clean_seed = sanitize(seed);
     if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuh";
     int seed_id = word_to_id[clean_seed];
 
-    // 2. build the initial state. 
-    // we want to find ANY prefix that ends with our seed_id.
     std::vector<int> rev_state;
     bool found_start = false;
 
-    // search reverse_memory for any key that ends with our seed_id
     for (auto const& pair : reverse_memory) {
       const std::vector<int>& state_vec = pair.first;
       if (!state_vec.empty() && state_vec.back() == seed_id) {
@@ -125,18 +213,22 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
       }
     }
 
-    if (!found_start) return seed + " "; // fallback if seed never appeared in a context
+    if (!found_start) return seed + " ";
 
     for (int i = 0; i < c; i++) {
-      if (reverse_memory.find(rev_state) == reverse_memory.end()) break;
+      // Context Entropy Check
+      if (rev_state.size() > 1 && ((double)rand() / RAND_MAX) < context_entropy) {
+        rev_state.erase(rev_state.begin());
+      }
+      while (reverse_memory.find(rev_state) == reverse_memory.end() && !rev_state.empty()) {
+        rev_state.erase(rev_state.begin());
+      }
+      if (rev_state.empty()) break;
 
       std::map<int, int>& options = reverse_memory[rev_state];
-      int next_id = w ? pick_weighted(options, f) : pick_random(options, f);
+      int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f);
 
-      // stop if we hit START (which is the beginning of the original sentence)
       if (next_id == START || next_id == -1) break;
-
-      // handle forced mode
       if (f && next_id == END) {
         next_id = 2 + (rand() % (vocabulary.size() - 2));
       }
@@ -147,33 +239,46 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
 
       rev_state.push_back(next_id);
       if (rev_state.size() > o) rev_state.erase(rev_state.begin());
-
-      while (reverse_memory.find(rev_state) == reverse_memory.end() && !rev_state.empty()) {
-        rev_state.erase(rev_state.begin());
-      }
-      if (rev_state.empty()) break;
     }
     return (word_counter == 0) ? seed + " " : result + seed + " ";
+  }
+
+  // ==========================================
+  // BRANCH 3: STANDARD SEEDED FORWARD GENERATION
+  // ==========================================
+  std::stringstream ss(clean_seed);
+  std::string word;
+  std::vector<int> current_state(o, START);
+  while (ss >> word) {
+    if (word_to_id.find(word) == word_to_id.end()) continue;
+    current_state.push_back(word_to_id[word]);
+    if (current_state.size() > o) current_state.erase(current_state.begin());
   }
 
   int word_counter = 0;
   std::string result = "";
   for (int i = 0; i < c; i++) {
-    if (memory.find(current_state) == memory.end()) break;
-    std::map<int, int>& options = memory[current_state];
-    int next_id = w ? pick_weighted(options, f) : pick_random(options, f);
-    if (f && (next_id == END || next_id == -1)) {
-      next_id = 2 + (rand() % (vocabulary.size() - 2));
+    // Context Entropy Check
+    if (current_state.size() > 1 && ((double)rand() / RAND_MAX) < context_entropy) {
+      current_state.erase(current_state.begin());
     }
-    else if (next_id == END || next_id == -1) break;
-    result += vocabulary[next_id] + " ";
-    word_counter++;
-    current_state.push_back(next_id);
-    if (current_state.size() > o) current_state.erase(current_state.begin());
     while (memory.find(current_state) == memory.end() && !current_state.empty()) {
       current_state.erase(current_state.begin());
     }
     if (current_state.empty()) break;
+
+    std::map<int, int>& options = memory[current_state];
+    int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f);
+    if (f && (next_id == END || next_id == -1)) {
+      next_id = 2 + (rand() % (vocabulary.size() - 2));
+    }
+    else if (next_id == END || next_id == -1) break;
+
+    result += vocabulary[next_id] + " ";
+    word_counter++;
+    
+    current_state.push_back(next_id);
+    if (current_state.size() > o) current_state.erase(current_state.begin());
   }
   return result;
 }

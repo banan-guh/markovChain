@@ -8,7 +8,7 @@
 
 class Markov {
 private:
-  int pick_weighted(std::map<int, int>& options, bool f);
+  int pick_weighted(std::map<int, int>& options, bool f, double damping = 1.0);
   int pick_random(std::map<int, int>& options, bool f);
 
 public:
@@ -23,8 +23,8 @@ public:
   Markov();
   int get_id(std::string word);
   std::string sanitize(std::string raw);
-  std::string generate(int o, bool w, int c, bool r, bool f);
-  std::string generate_seeded(std::string seed, int o, bool w, int c, bool r, bool f);
+  std::string generate(int o, bool w, int c, bool r, bool f, double damping = 1.0, double context_entropy = 0.0);
+  std::string generate_seeded(std::string seed, int o, bool w, int c, bool r, bool infix, bool f, double damping = 1.0, double context_entropy = 0.0);
   void train(std::string raw_message, int max_order);
   void train_from_file(std::string filename, int o);
   void save_brain(std::string folder);
