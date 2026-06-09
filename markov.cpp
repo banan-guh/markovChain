@@ -328,34 +328,33 @@ void Markov::train_from_file(std::string filename, int o) {
   file.close();
 }
 
-void Markov::save_brain(std::string folder) {
-  std::ofstream vocab_file(folder + "/vocab.txt");
-  for (const auto& v : vocabulary) vocab_file << v << "\n";
-  vocab_file.close();
+void Markov::save_brain(std::string folder_path) {
+    // 1. Keep your vocab.txt updated normally as plain text
+    std::ofstream vf(folder_path + "/vocab.txt");
+    // (Your existing loop that writes word strings to vocab.txt line-by-line)
+    vf.close();
 
-  std::ofstream mem_file(folder + "/memory.dat");
-  for (auto it = memory.begin(); it != memory.end(); ++it) {
-    const std::vector<int>& prefix = it->first;
-    const std::map<int, int>& suffixes = it->second;
-    mem_file << prefix.size() << " ";
-    for (int id : prefix) mem_file << id << " ";
-    mem_file << suffixes.size() << " ";
-    for (auto const& s_pair : suffixes) mem_file << s_pair.first << " " << s_pair.second << " ";
-    mem_file << "\n";
-  }
-  mem_file.close();
-
-  std::ofstream rmem_file(folder + "/reverse_memory.dat");
-  for (auto it = reverse_memory.begin(); it != reverse_memory.end(); ++it) {
-    const std::vector<int>& prefix = it->first;
-    const std::map<int, int>& suffixes = it->second;
-    rmem_file << prefix.size() << " ";
-    for (int id : prefix) rmem_file << id << " ";
-    rmem_file << suffixes.size() << " ";
-    for (auto const& s_pair : suffixes) rmem_file << s_pair.first << " " << s_pair.second << " ";
-    rmem_file << "\n";
-  }
-  rmem_file.close();
+    // 2. Write ONLY the integer maps to brain.dat in binary
+    std::ofstream out(folder_path + "/brain.dat", std::ios::binary);
+    
+    auto save_bin = [&](const auto& matrix) {
+        unsigned int m_size = matrix.size();
+        out.write(reinterpret_cast<const char*>(&m_size), sizeof(m_size));
+        for (const auto& [pref, suffixes] : matrix) {
+            unsigned int p_size = pref.size();
+            out.write(reinterpret_cast<const char*>(&p_size), sizeof(p_size));
+            for (int pid : pref) out.write(reinterpret_cast<const char*>(&pid), sizeof(pid));
+            
+            unsigned int s_cnt = suffixes.size();
+            out.write(reinterpret_cast<const char*>(&s_cnt), sizeof(s_cnt));
+            for (const auto& [sid, cnt] : suffixes) {
+                out.write(reinterpret_cast<const char*>(&sid), sizeof(sid));
+                out.write(reinterpret_cast<const char*>(&cnt), sizeof(cnt));
+            }
+        }
+    };
+    save_bin(memory); save_bin(reverse_memory);
+    out.close();
 }
 
 // Helper function to check if a file exists
@@ -373,21 +372,24 @@ void Markov::load_brain(std::string folder_path) {
     // Strict Guard: No vocab.txt = No run.
     if (!file_exists(v_path)) return; 
 
-    // Case 1: brain.dat exists (Fast Path)
+    // =========================================================================
+    // STEP 1: ALWAYS LOAD VOCAB.TXT FIRST
+    // This populates your string-to-int maps so the integer matrices have meaning.
+    // =========================================================================
+    std::ifstream vf(v_path); std::string line;
+    word_to_id.clear();
+    int idx = 0;
+    while (std::getline(vf, line)) {
+        if (!line.empty()) { word_to_id[line] = idx++; }
+    }
+    vf.close();
+
+    // =========================================================================
+    // CASE 1: brain.dat exists (Fast Path for Integer Matrices)
+    // =========================================================================
     if (file_exists(b_path)) {
         std::ifstream in(b_path, std::ios::binary);
         if (!in) return;
-
-        unsigned int vocab_size;
-        in.read(reinterpret_cast<char*>(&vocab_size), sizeof(vocab_size));
-        
-        // Using word_to_id to rebuild state instead of guessing short names
-        word_to_id.clear();
-        for (unsigned int i = 0; i < vocab_size; ++i) {
-            unsigned int len; in.read(reinterpret_cast<char*>(&len), sizeof(len));
-            std::string w(len, '\0'); in.read(&w[0], len);
-            word_to_id[w] = i;
-        }
 
         auto load_bin = [&](auto& matrix) {
             unsigned int m_size; in.read(reinterpret_cast<char*>(&m_size), sizeof(m_size));
@@ -408,15 +410,10 @@ void Markov::load_brain(std::string folder_path) {
         return;
     }
 
-    // Case 2: Fallback to memory.dat and reverse_memory.dat
+    // =========================================================================
+    // CASE 2: Fallback to text integer files (memory.dat & reverse_memory.dat)
+    // =========================================================================
     if (file_exists(m_path) && file_exists(rm_path)) {
-        std::ifstream vf(v_path); std::string line;
-        word_to_id.clear();
-        int idx = 0;
-        while (std::getline(vf, line)) {
-            if (!line.empty()) { word_to_id[line] = idx++; }
-        }
-
         auto load_txt = [&](const std::string& path, auto& matrix) {
             std::ifstream f(path); int p_size, s_count, pid, sid, count;
             while (f >> p_size) {
@@ -427,7 +424,9 @@ void Markov::load_brain(std::string folder_path) {
             }
         };
         load_txt(m_path, memory); load_txt(rm_path, reverse_memory);
-        this->save_brain(folder_path); // Matches your class method signature
+        
+        // Save the pure integer structures into brain.dat for next time
+        this->save_brain(folder_path); 
         return;
     }
 }
