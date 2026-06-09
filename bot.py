@@ -421,13 +421,12 @@ class Bot(commands.Bot):
 
         await self.safe_reply(ctx, inline_report)
     
-    @bot.event
     async def on_command_error(self, ctx, error):
         # Catch the "Command not found" error and silently drop it
         if isinstance(error, commands.CommandNotFound):
             return
         
-        # Optional: Print other actual errors (like syntax issues) so you can still debug
+        # Print other actual errors
         print(f"[Error] {error}")
 
 if __name__ == "__main__":
