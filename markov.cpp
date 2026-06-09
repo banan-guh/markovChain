@@ -371,20 +371,22 @@ void Markov::load_brain(std::string folder_path) {
     std::string rm_path = folder_path + "/reverse_memory.dat";
 
     // Strict Guard: No vocab.txt = No run.
-    if (!file_exists(v_path)) return false;
+    if (!file_exists(v_path)) return; 
 
     // Case 1: brain.dat exists (Fast Path)
     if (file_exists(b_path)) {
         std::ifstream in(b_path, std::ios::binary);
-        if (!in) return false;
+        if (!in) return;
 
         unsigned int vocab_size;
         in.read(reinterpret_cast<char*>(&vocab_size), sizeof(vocab_size));
-        vocab.clear(); word_to_id.clear();
+        
+        // Using word_to_id to rebuild state instead of guessing short names
+        word_to_id.clear();
         for (unsigned int i = 0; i < vocab_size; ++i) {
             unsigned int len; in.read(reinterpret_cast<char*>(&len), sizeof(len));
             std::string w(len, '\0'); in.read(&w[0], len);
-            vocab.push_back(w); word_to_id[w] = i;
+            word_to_id[w] = i;
         }
 
         auto load_bin = [&](auto& matrix) {
@@ -403,15 +405,16 @@ void Markov::load_brain(std::string folder_path) {
             }
         };
         load_bin(memory); load_bin(reverse_memory);
-        return true;
+        return;
     }
 
     // Case 2: Fallback to memory.dat and reverse_memory.dat
     if (file_exists(m_path) && file_exists(rm_path)) {
         std::ifstream vf(v_path); std::string line;
-        vocab.clear(); word_to_id.clear();
+        word_to_id.clear();
+        int idx = 0;
         while (std::getline(vf, line)) {
-            if (!line.empty()) { vocab.push_back(line); word_to_id[line] = vocab.size() - 1; }
+            if (!line.empty()) { word_to_id[line] = idx++; }
         }
 
         auto load_txt = [&](const std::string& path, auto& matrix) {
@@ -424,10 +427,9 @@ void Markov::load_brain(std::string folder_path) {
             }
         };
         load_txt(m_path, memory); load_txt(rm_path, reverse_memory);
-        this->save(folder_path); // Generates your brain.dat
-        return true;
+        this->save_brain(folder_path); // Matches your class method signature
+        return;
     }
-    return false;
 }
 
 void Markov::purge(std::vector<std::string> blocked_words) {
