@@ -13,7 +13,7 @@ PYBIND11_MODULE(markov_lib, m) {
     .def("train_from_file", &Markov::train_from_file)
     .def("generate", &Markov::generate)
     .def("generate_seeded", &Markov::generate_seeded)
-    .def("save", &Markov::save_brain)
-    .def("load", &Markov::load_brain)
+    .def("save_brain", &Markov::save_brain)
+    .def("load_brain", &Markov::load_brain)
     .def("sanitize", &Markov::sanitize);
 }
