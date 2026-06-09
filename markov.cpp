@@ -9,6 +9,7 @@
 #include <sstream>
 #include <fstream>
 #include <algorithm>
+#include <sys/stat.h>
 
 Markov::Markov() {
   vocabulary.push_back("[START]");
@@ -363,7 +364,7 @@ bool file_exists(const std::string& name) {
     return (stat(name.c_str(), &buffer) == 0); 
 }
 
-bool Markov::load_brain(const std::string& folder_path) {
+void Markov::load_brain(std::string folder_path) {
     std::string v_path = folder_path + "/vocab.txt";
     std::string b_path = folder_path + "/brain.dat";
     std::string m_path = folder_path + "/memory.dat";
