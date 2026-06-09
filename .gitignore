@@ -24,7 +24,6 @@ markovChain.sln
 markovChain.vcxproj
 markovChain.vcxproj.filters
 markovChain.vcxproj.user
-bot.py
-*.py
 wrapper.exp
 wrapper.lib
+compile.py
