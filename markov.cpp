@@ -40,7 +40,7 @@ int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
     for (auto const& pair : options) {
         if (f && pair.first == END && options.size() > 1) continue;
         if (pair.first == END || pair.first == START) {
-            total += std::max(1, static_cast<int>(pair.second * damping));
+            total += (damping == 0.0) ? 0 : std::max(1, static_cast<int>(pair.second * damping));
         } else {
             total += pair.second;
         }
@@ -50,13 +50,12 @@ int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
     int roll = get_rand_int(0, total - 1);
 
     for (auto const& pair : options) {
-        if (f && pair.first == END && options.size() > 1) continue;
-        int current_weight = pair.second;
-        if (pair.first == END || pair.first == START) {
-            current_weight = std::max(1, static_cast<int>(pair.second * damping));
-        }
+      if (f && pair.first == END && options.size() > 1) continue;
+      int current_weight = (pair.first == END || pair.first == START) 
+                         ? ((damping == 0.0) ? 0 : std::max(1, static_cast<int>(pair.second * damping))) 
+                         : pair.second;
 
-        if (roll < current_weight) return pair.first;
+    if (roll < current_weight) return pair.first;
         roll -= current_weight;
     }
     return END;
