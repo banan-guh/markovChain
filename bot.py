@@ -63,9 +63,9 @@ def save_brain(bot_ref):
     
     # Legacy text-saving methods
     cpp_engine = bot_ref.bot_instance
-    cpp_engine.save_txt("./brain/memory.dat", False)
-    cpp_engine.save_txt("./brain/reverse_memory.dat", True)
-    cpp_engine.save_vocab("./brain/vocab.txt")
+    cpp_engine.save("./brain/memory.dat")
+    cpp_engine.save("./brain/reverse_memory.dat")
+    cpp_engine.save("./brain/vocab.txt")
 
     # Keep your custom backup feature running on the legacy files
     now = datetime.now()
