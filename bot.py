@@ -41,7 +41,7 @@ def save_brain():
     os.makedirs("./backups", exist_ok=True) # <-- Creates backups directory if missing
     
     # Execute primary C++ library save
-    bot_instance.save_brain("./brain_tmp")
+    bot_instance.save("./brain_tmp")
     
     # Atomic rotation to prevent system corruption on sudden crash
     if os.path.exists("./brain_bak"): shutil.rmtree("./brain_bak", ignore_errors=True)
