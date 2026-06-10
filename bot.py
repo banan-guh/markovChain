@@ -60,7 +60,7 @@ def save_brain(bot_ref):
     if not os.path.exists(backup_filename) and os.path.exists("./brain/brain.dat"):
         shutil.copy2("./brain/brain.dat", backup_filename)
 
-def clean_shutdown(sig, frame, bot_ref):
+def clean_shutdown(bot_ref, sig, frame):
     if hasattr(bot_ref, 'autosave_task') and bot_ref.autosave_task:
         bot_ref.autosave_task.cancel()
 
@@ -81,31 +81,6 @@ def clean_shutdown(sig, frame, bot_ref):
         pass
 
     sys.exit(0)
-
-def clean_shutdown(bot_ref, *_):
-    if hasattr(bot_ref, 'autosave_task') and bot_ref.autosave_task:
-        bot_ref.autosave_task.cancel()
-
-    if bot_ref.loop and bot_ref.loop.is_running():
-        target_channel = bot_ref.get_channel("your_channel_name")
-        if target_channel:
-            asyncio.run_coroutine_threadsafe(
-                target_channel.send("SadCat saving and shutting down..."), 
-                bot_ref.loop
-            )
-            time.sleep(0.2)
-
-    try:
-        save_brain(bot_ref)
-        if hasattr(bot_ref, 'save_cfg'):
-            bot_ref.save_cfg()
-    except Exception:
-        pass
-
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, clean_shutdown)
-signal.signal(signal.SIGTERM, clean_shutdown)
 
 def clean_spam(text):
     text = re.sub(r'(.)\1{10,}', r'\1'*10, text)
