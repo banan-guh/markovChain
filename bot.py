@@ -38,79 +38,70 @@ def save_brain(bot_ref):
     os.makedirs("./brain", exist_ok=True)
     os.makedirs("./backups", exist_ok=True)
     
-    # 1. Grab the C++ instance and tell it to write the binary temp data
     cpp_engine = bot_ref.bot_instance
-    print("[Brain] Streaming internal matrices to temp files...")
-    cpp_engine.save("./brain") # Calls your C++ save_brain via the wrapper
+    cpp_engine.save("./brain")
     
-    # 2. Complete the file rotation safely
-    # If the C++ file wrote successfully, swap it into place immediately
     if os.path.exists("./brain/brain.dat.tmp"):
         if os.path.exists("./brain/brain.dat"):
-            # Keep a backup of the previous session's binary data
             if os.path.exists("./brain/brain.dat.bak"):
                 os.remove("./brain/brain.dat.bak")
             os.rename("./brain/brain.dat", "./brain/brain.dat.bak")
-        
         os.rename("./brain/brain.dat.tmp", "./brain/brain.dat")
-        print("[Brain] brain.dat successfully updated and locked.")
         
     if os.path.exists("./brain/vocab.txt.tmp"):
         if os.path.exists("./brain/vocab.txt"):
             os.remove("./brain/vocab.txt")
         os.rename("./brain/vocab.txt.tmp", "./brain/vocab.txt")
 
-    # 3. Handle the Monthly Archive Snapshot
     now = datetime.now()
     date_str = now.strftime("%B").lower() + str(now.day)
     backup_filename = f"./backups/brain_backup_{date_str}.dat"
     
     if not os.path.exists(backup_filename) and os.path.exists("./brain/brain.dat"):
-        print(f"[Backup] Snapshotting archive milestone: {backup_filename}")
         shutil.copy2("./brain/brain.dat", backup_filename)
 
-def track_monthly_words(message_text):
-    month_file = "./brain/brain_month.txt"
-    now = datetime.now()
-    
-    # Strip punctuation and get lowercase words
-    words = re.findall(r'\b\w+\b', message_text.lower())
-    if not words:
-        return
+def clean_shutdown(bot_ref, *_):
+    if hasattr(bot_ref, 'autosave_task') and bot_ref.autosave_task:
+        bot_ref.autosave_task.cancel()
 
-    # HARD RESET TRIGGER: Check if the file belongs to a previous month
-    if os.path.exists(month_file):
-        mtime = datetime.fromtimestamp(os.path.getmtime(month_file))
-        # If the current month or year doesn't match the file's last write date, wipe it
-        if mtime.month != now.month or mtime.year != now.year:
-            print(f"[Brain] New month detected ({now.strftime('%B')}). Resetting monthly leaderboards!")
-            try:
-                os.remove(month_file)
-            except OSError:
-                pass
+    if bot_ref.loop and bot_ref.loop.is_running():
+        target_channel = bot_ref.get_channel("your_channel_name")
+        if target_channel:
+            asyncio.run_coroutine_threadsafe(
+                target_channel.send("SadCat saving and shutting down..."), 
+                bot_ref.loop
+            )
+            time.sleep(0.2)
 
-    # 1. Read current month's counts
-    counts = Counter()
-    if os.path.exists(month_file):
-        with open(month_file, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                if " : " in line:
-                    w, c = line.strip().split(" : ", 1)
-                    counts[w] = int(c)
+    try:
+        save_brain(bot_ref)
+        if hasattr(bot_ref, 'save_cfg'):
+            bot_ref.save_cfg()
+    except Exception:
+        pass
 
-    # 2. Update with the incoming text
-    counts.update(words)
+    sys.exit(0)
 
-    # 3. Save it back out
-    with open(month_file, "w", encoding="utf-8") as f:
-        for w, c in counts.items():
-            f.write(f"{w} : {c}\n")
+def clean_shutdown(bot_ref, *_):
+    if hasattr(bot_ref, 'autosave_task') and bot_ref.autosave_task:
+        bot_ref.autosave_task.cancel()
 
-def clean_shutdown(*_):
-    print("saving and shutting down...")
-    await ctx.reply("SadCat saving and shutting down...")
-    save_brain()
-    save_cfg()
+    if bot_ref.loop and bot_ref.loop.is_running():
+        target_channel = bot_ref.get_channel("your_channel_name")
+        if target_channel:
+            asyncio.run_coroutine_threadsafe(
+                target_channel.send("SadCat saving and shutting down..."), 
+                bot_ref.loop
+            )
+            time.sleep(0.2)
+
+    try:
+        save_brain(bot_ref)
+        if hasattr(bot_ref, 'save_cfg'):
+            bot_ref.save_cfg()
+    except Exception:
+        pass
+
     sys.exit(0)
 
 signal.signal(signal.SIGINT, clean_shutdown)
