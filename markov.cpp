@@ -68,11 +68,6 @@ int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping, d
         // Damping override for eternal yapping
         if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
 
-        // Context Entropy filter for pruning low frequency options
-        if (context_entropy > 0.0 && pair.first != END && pair.first != START) {
-            if (pair.second < max_weight * context_entropy) continue;
-        }
-
         if (pair.first == END || pair.first == START) {
             total += (damping == 0.0) ? 0 : std::max(1, static_cast<int>(pair.second * damping));
         } else {
@@ -86,10 +81,6 @@ int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping, d
     for (auto const& pair : options) {
         if (f && pair.first == END && options.size() > 1) continue;
         if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
-        
-        if (context_entropy > 0.0 && pair.first != END && pair.first != START) {
-            if (pair.second < max_weight * context_entropy) continue;
-        }
 
         int current_weight = (pair.first == END || pair.first == START) 
                              ? ((damping == 0.0) ? 0 : std::max(1, static_cast<int>(pair.second * damping))) 
@@ -114,9 +105,6 @@ int Markov::pick_random(std::map<int, int>& options, bool f, double damping, dou
     for (auto const& pair : options) {
         if (f && pair.first == END && options.size() > 1) continue;
         if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
-        if (context_entropy > 0.0 && pair.first != END && pair.first != START) {
-            if (pair.second < max_weight * context_entropy) continue;
-        }
         keys.push_back(pair.first);
     }
 
@@ -155,7 +143,7 @@ std::string Markov::generate(int o, bool w, int c, bool r, bool f, double dampin
         if (current_state.empty()) break;
 
         std::map<int, int>& options = memory[current_state];
-        int next_id = w ? pick_weighted(options, f, damping, context_entropy) : pick_random(options, f, damping, context_entropy);
+        int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f, damping);
         
         if (f && (next_id == END || next_id == -1)) {
             if (vocabulary.size() > 2) {
@@ -207,7 +195,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
                 if (rev_state.empty()) break;
 
                 std::map<int, int>& options = reverse_memory[rev_state];
-                int next_id = w ? pick_weighted(options, f, damping, context_entropy) : pick_random(options, f, damping, context_entropy);
+                int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f, damping);
                 
                 if (next_id == START || next_id == -1) break;
                 
@@ -244,7 +232,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
                 if (fwd_state.empty()) break;
 
                 std::map<int, int>& options = memory[fwd_state];
-                int next_id = w ? pick_weighted(options, f, damping, context_entropy) : pick_random(options, f, damping, context_entropy);
+                int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f, damping);
                 
                 if (f && (next_id == END || next_id == -1)) {
                   if (vocabulary.size() > 2) next_id = get_rand_int(2, vocabulary.size() - 1);
@@ -293,7 +281,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
             if (rev_state.empty()) break;
 
             std::map<int, int>& options = reverse_memory[rev_state];
-            int next_id = w ? pick_weighted(options, f, damping, context_entropy) : pick_random(options, f, damping, context_entropy);
+            int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f, damping);
 
             if (next_id == START || next_id == -1) break;
             
@@ -336,7 +324,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
         if (current_state.empty()) break;
 
         std::map<int, int>& options = memory[current_state];
-        int next_id = w ? pick_weighted(options, f, damping, context_entropy) : pick_random(options, f, damping, context_entropy);
+        int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f, damping);
         
         if (f && (next_id == END || next_id == -1)) {
             if (vocabulary.size() > 2) next_id = get_rand_int(2, vocabulary.size() - 1);

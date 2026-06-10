@@ -8,8 +8,8 @@
 
 class Markov {
 private:
-  int pick_weighted(std::map<int, int>& options, bool f, double damping = 1.0, double context_entropy = 0.0);
-  int pick_random(std::map<int, int>& options, bool f, double damping = 1.0, double context_entropy = 0.0);
+  int pick_weighted(std::map<int, int>& options, bool f, double damping = 1.0);
+  int pick_random(std::map<int, int>& options, bool f, double damping = 1.0);
 
 public:
   int START = 0;
