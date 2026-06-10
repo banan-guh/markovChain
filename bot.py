@@ -111,7 +111,8 @@ class Bot(commands.Bot):
             client_secret=cfg["client_secret"],
             bot_id=cfg["bot_id"],
             prefix=list(SPECIAL_CHARS),
-            initial_channels=CHANNELS
+            initial_channels=CHANNELS,
+            loop=asyncio.get_event_loop()
         )
         self.silent, self.sleep, self.train_until, self.erm_bypass = silent, False, 0, True
         self.cd, self.cd_warned, self.last_sent, self.cmd_cd, self.global_cd = {}, set(), 0, 1, 1
@@ -433,16 +434,22 @@ async def pre_boot_refresh():
                 sys.exit(1)
 
 if __name__ == "__main__":
-    # Run the async token verification first
-    asyncio.run(pre_boot_refresh())
+    # 1. Create a persistent event loop for the main thread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
-    # Reload the configuration with the updated token before starting the bot
+    # 2. Run the token verification step inside this persistent loop
+    loop.run_until_complete(pre_boot_refresh())
+
+    # 3. Reload the configuration with the updated token
     with open(CONFIG_FILE, "r") as f:
         cfg = {**DEFAULT_CFG, **json.load(f)}
 
+    # 4. Instantiate the Bot (the class __init__ will automatically pick up our loop)
     bot = Bot(silent="-silent" in sys.argv)
     
     signal.signal(signal.SIGINT, lambda sig, frame: clean_shutdown(bot, sig, frame))
     signal.signal(signal.SIGTERM, lambda sig, frame: clean_shutdown(bot, sig, frame))
     
+    # 5. Start the bot up normally
     bot.run()
