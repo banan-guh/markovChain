@@ -34,34 +34,39 @@ def save_cfg():
 bot_instance = markov_lib.MarkovBot()
 
 # Atomic save for brain files to prevent corruption on crash
-def save_brain():
-    # Make sure our baseline directory exists
+def save_brain(bot_ref):
     os.makedirs("./brain", exist_ok=True)
     os.makedirs("./backups", exist_ok=True)
     
-    # 1. Tell C++ to write to a temporary file layout instead of wiping the folder
-    # This generates ./brain/brain.dat.tmp and ./brain/vocab.txt.tmp
-    bot_instance.save("./brain")
+    # 1. Grab the C++ instance and tell it to write the binary temp data
+    cpp_engine = bot_ref.bot_instance
+    print("[Brain] Streaming internal matrices to temp files...")
+    cpp_engine.save("./brain") # Calls your C++ save_brain via the wrapper
     
-    # 2. Atomically replace ONLY the specific target files if the temp files exist
-    # This leaves memory.dat and reverse_memory.dat completely untouched!
+    # 2. Complete the file rotation safely
+    # If the C++ file wrote successfully, swap it into place immediately
     if os.path.exists("./brain/brain.dat.tmp"):
         if os.path.exists("./brain/brain.dat"):
-            os.replace("./brain/brain.dat", "./brain/brain.dat.bak")
-        os.replace("./brain/brain.dat.tmp", "./brain/brain.dat")
+            # Keep a backup of the previous session's binary data
+            if os.path.exists("./brain/brain.dat.bak"):
+                os.remove("./brain/brain.dat.bak")
+            os.rename("./brain/brain.dat", "./brain/brain.dat.bak")
+        
+        os.rename("./brain/brain.dat.tmp", "./brain/brain.dat")
+        print("[Brain] brain.dat successfully updated and locked.")
         
     if os.path.exists("./brain/vocab.txt.tmp"):
-        os.replace("./brain/vocab.txt.tmp", "./brain/vocab.txt")
+        if os.path.exists("./brain/vocab.txt"):
+            os.remove("./brain/vocab.txt")
+        os.rename("./brain/vocab.txt.tmp", "./brain/vocab.txt")
 
-    # =========================================================================
-    # MONTHLY BACKUP HITCH
-    # =========================================================================
+    # 3. Handle the Monthly Archive Snapshot
     now = datetime.now()
     date_str = now.strftime("%B").lower() + str(now.day)
     backup_filename = f"./backups/brain_backup_{date_str}.dat"
     
     if not os.path.exists(backup_filename) and os.path.exists("./brain/brain.dat"):
-        print(f"[Backup] Generating monthly milestone snapshot: {backup_filename}")
+        print(f"[Backup] Snapshotting archive milestone: {backup_filename}")
         shutil.copy2("./brain/brain.dat", backup_filename)
 
 def track_monthly_words(message_text):
@@ -103,6 +108,7 @@ def track_monthly_words(message_text):
 
 def clean_shutdown(*_):
     print("saving and shutting down...")
+    await ctx.reply("SadCat saving and shutting down...")
     save_brain()
     save_cfg()
     sys.exit(0)
