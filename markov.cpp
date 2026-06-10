@@ -102,6 +102,8 @@ int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping, d
 }
 
 int Markov::pick_random(std::map<int, int>& options, bool f, double damping, double context_entropy) {
+    std::vector<int> keys;
+    
     int max_weight = 0;
     for (auto const& pair : options) {
         if (pair.first != END && pair.first != START && pair.second > max_weight) {
@@ -109,40 +111,32 @@ int Markov::pick_random(std::map<int, int>& options, bool f, double damping, dou
         }
     }
 
-    // Build a flat pool: regular words get count entries (uniform within survivors),
-    // END/START get damping-scaled entries, giving -d gradual effect in random mode too.
-    std::vector<int> pool;
     for (auto const& pair : options) {
         if (f && pair.first == END && options.size() > 1) continue;
         if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
-
         if (context_entropy > 0.0 && pair.first != END && pair.first != START) {
             if (pair.second < max_weight * context_entropy) continue;
         }
-
-        if (pair.first == END || pair.first == START) {
-            int w = std::max(1, static_cast<int>(pair.second * damping));
-            for (int i = 0; i < w; i++) pool.push_back(pair.first);
-        } else {
-            for (int i = 0; i < pair.second; i++) pool.push_back(pair.first);
-        }
+        keys.push_back(pair.first);
     }
 
-    // Fallback: entropy wiped the pool, retry ignoring entropy but keep damping
-    if (pool.empty()) {
+    // Fallback: entropy wiped the pool, retry keeping damping and f
+    if (keys.empty()) {
         for (auto const& pair : options) {
+            if (f && pair.first == END && options.size() > 1) continue;  // f fix
             if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
-            if (pair.first == END || pair.first == START) {
-                int w = std::max(1, static_cast<int>(pair.second * damping));
-                for (int i = 0; i < w; i++) pool.push_back(pair.first);
-            } else {
-                for (int i = 0; i < pair.second; i++) pool.push_back(pair.first);
-            }
+            keys.push_back(pair.first);
         }
     }
 
-    if (pool.empty()) return END;
-    return pool[get_rand_int(0, pool.size() - 1)];
+    if (keys.empty()) return END;
+
+    // Pick uniformly, but treat damping as a rejection probability for END/START
+    while (true) {
+        int candidate = keys[get_rand_int(0, keys.size() - 1)];
+        if ((candidate == END || candidate == START) && get_rand_double() > damping) continue;
+        return candidate;
+    }
 }
 
 std::string Markov::generate(int o, bool w, int c, bool r, bool f, double damping, double context_entropy) {
