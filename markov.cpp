@@ -137,24 +137,6 @@ int Markov::pick_random(std::map<int, int>& options, bool f, double damping, dou
     return keys[get_rand_int(0, keys.size() - 1)];
 }
 
-int Markov::get_id(std::string word) {
-    if (word_to_id.find(word) == word_to_id.end()) {
-        int new_id = vocabulary.size();
-        vocabulary.push_back(word);
-        word_to_id[word] = new_id;
-        return new_id;
-    }
-    return word_to_id[word];
-}
-
-std::string Markov::sanitize(std::string raw) {
-    std::string clean;
-    for (unsigned char c : raw) {
-        if (c >= 32 && c <= 126) clean += c;
-    }
-    return clean;
-}
-
 std::string Markov::generate(int o, bool w, int c, bool r, bool f, double damping, double context_entropy) {
     std::vector<int> current_state(o, START);
     int word_counter = 0;
