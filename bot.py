@@ -60,7 +60,7 @@ def save_brain(bot_ref):
     if not os.path.exists(backup_filename) and os.path.exists("./brain/brain.dat"):
         shutil.copy2("./brain/brain.dat", backup_filename)
 
-def clean_shutdown(bot_ref, *_):
+def clean_shutdown(sig, frame, bot_ref):
     if hasattr(bot_ref, 'autosave_task') and bot_ref.autosave_task:
         bot_ref.autosave_task.cancel()
 
@@ -420,13 +420,17 @@ class Bot(commands.Bot):
 
         await self.safe_reply(ctx, inline_report)
     
-    async def on_command_error(self, ctx, error):
-        # Catch the "Command not found" error and silently drop it
+    async def event_command_error(self, ctx, error):
         if isinstance(error, commands.CommandNotFound):
             return
-        
-        # Print other actual errors
         print(f"[Error] {error}")
 
 if __name__ == "__main__":
-    Bot(silent="-silent" in sys.argv).run()
+    import signal
+    
+    bot = Bot(silent="-silent" in sys.argv)
+    
+    signal.signal(signal.SIGINT, lambda sig, frame: clean_shutdown(sig, frame, bot))
+    signal.signal(signal.SIGTERM, lambda sig, frame: clean_shutdown(sig, frame, bot))
+    
+    bot.run()
