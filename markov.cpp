@@ -1,12 +1,17 @@
 #include "markov.h"
 #include <iostream>
+#include <string>
+#include <map>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+#include <random>
+#include <chrono>
 #include <sstream>
 #include <fstream>
 #include <algorithm>
-#include <random>
-#include <chrono>
-#include <unordered_set>
 
+// Reusable standard modern RNG engine
 static std::mt19937& get_rng() {
     static std::mt19937 gen(std::chrono::system_clock::now().time_since_epoch().count());
     return gen;
@@ -34,7 +39,6 @@ int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
     int total = 0;
     for (auto const& pair : options) {
         if (f && pair.first == END && options.size() > 1) continue;
-        
         if (pair.first == END || pair.first == START) {
             total += std::max(1, static_cast<int>(pair.second * damping));
         } else {
@@ -47,7 +51,6 @@ int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
 
     for (auto const& pair : options) {
         if (f && pair.first == END && options.size() > 1) continue;
-        
         int current_weight = pair.second;
         if (pair.first == END || pair.first == START) {
             current_weight = std::max(1, static_cast<int>(pair.second * damping));
@@ -484,10 +487,10 @@ void Markov::purge(std::vector<std::string> blocked_words) {
         ++it;
     }
 
-    // Get or register the unified "uuh" token
+    // Get the ID of the fallback string safely
     int uuh_id = get_id("uuh");
 
-    // Remap blocked strings to use the structural id of "uuh"
+    // Cleanly link blocked keywords directly to the unified "uuh" token ID
     for (const auto& word : blocked_words) {
         if (word == "uuh") continue; 
         
