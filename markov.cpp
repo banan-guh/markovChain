@@ -53,7 +53,7 @@ std::string Markov::sanitize(std::string raw) {
     return clean;
 }
 
-int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping, double context_entropy) {
+int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
     int max_weight = 0;
     for (auto const& pair : options) {
         if (pair.first != END && pair.first != START && pair.second > max_weight) {
@@ -92,7 +92,7 @@ int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping, d
     return END;
 }
 
-int Markov::pick_random(std::map<int, int>& options, bool f, double damping, double context_entropy) {
+int Markov::pick_random(std::map<int, int>& options, bool f, double damping) {
     std::vector<int> keys;
     
     int max_weight = 0;
