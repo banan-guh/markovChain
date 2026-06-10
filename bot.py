@@ -41,7 +41,7 @@ def save_brain():
     
     # 1. Tell C++ to write to a temporary file layout instead of wiping the folder
     # This generates ./brain/brain.dat.tmp and ./brain/vocab.txt.tmp
-    bot_instance.save_brain("./brain")
+    bot_instance.save("./brain")
     
     # 2. Atomically replace ONLY the specific target files if the temp files exist
     # This leaves memory.dat and reverse_memory.dat completely untouched!
