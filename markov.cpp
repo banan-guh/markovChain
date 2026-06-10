@@ -35,45 +35,6 @@ Markov::Markov() {
     word_to_id["[END]"] = END;
 }
 
-int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
-    int total = 0;
-    for (auto const& pair : options) {
-        if (f && pair.first == END && options.size() > 1) continue;
-        if (pair.first == END || pair.first == START) {
-            total += (damping == 0.0) ? 0 : std::max(1, static_cast<int>(pair.second * damping));
-        } else {
-            total += pair.second;
-        }
-    }
-    if (total <= 0) return END;
-
-    int roll = get_rand_int(0, total - 1);
-
-    for (auto const& pair : options) {
-      if (f && pair.first == END && options.size() > 1) continue;
-      int current_weight = (pair.first == END || pair.first == START) 
-                         ? ((damping == 0.0) ? 0 : std::max(1, static_cast<int>(pair.second * damping))) 
-                         : pair.second;
-
-    if (roll < current_weight) return pair.first;
-        roll -= current_weight;
-    }
-    return END;
-}
-
-int Markov::pick_random(std::map<int, int>& options, bool f, double damping) {
-    std::vector<int> keys;
-    for (auto const& pair : options) {
-        if (f && pair.first == END && options.size() > 1) continue;
-        if (damping == 0.0 && (pair.first == END || pair.first == START)) {
-            continue;
-        }
-        keys.push_back(pair.first);
-    }
-    if (keys.empty()) return END;
-    return keys[get_rand_int(0, keys.size() - 1)];
-}
-
 int Markov::get_id(std::string word) {
     if (word_to_id.find(word) == word_to_id.end()) {
         int new_id = vocabulary.size();
