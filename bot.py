@@ -14,8 +14,8 @@ DEFAULT_CFG = {
     "client_id": "", "client_secret": "", "token": "", "refresh_token": "", "bot_id": "1468479097",
     "admin_list": ["ermugo1", "ermugo2"], "user_blocklist": [], "train_list": [], "blocked_words": [], 
     "train_start": "15:00", "train_end": "10:00",
-    "default_damping": 0.5,        
-    "default_entropy": 0.65         
+    "default_damping": 0.25,
+    "default_entropy": 0.05
 }
 
 try:
