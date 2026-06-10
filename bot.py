@@ -153,9 +153,7 @@ class Bot(commands.Bot):
         print(f"bot ready | joined: {', '.join(CHANNELS)}")
         
         # Legacy individual file loading
-        self.bot_instance.load_vocab("./brain/vocab.txt")
-        self.bot_instance.load_txt("./brain/memory.dat", False)
-        self.bot_instance.load_txt("./brain/reverse_memory.dat", True)
+        self.bot_instance.load("./brain")
         
         if hasattr(self, 'add_token') and cfg["refresh_token"]:
             try: await self.add_token(cfg["token"], cfg["refresh_token"])
