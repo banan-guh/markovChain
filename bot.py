@@ -400,10 +400,48 @@ class Bot(commands.Bot):
             return
         print(f"[Error] {error}")
 
+    async def pre_boot_refresh():
+        print("Checking token validity before boot...")
+        url = "https://id.twitch.tv/oauth2/validate"
+        headers = {"Authorization": f"OAuth {cfg['token']}"}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                # If the token is valid, we can safely exit this check
+                if resp.status == 200:
+                    print("Token is valid!")
+                    return
+
+            # If it failed validation, use the refresh token immediately
+            print("Initial token invalid. Triggering pre-boot refresh...")
+            refresh_url = "https://id.twitch.tv/oauth2/token"
+            params = {
+                "client_id": cfg["client_id"], 
+                "client_secret": cfg["client_secret"], 
+                "grant_type": "refresh_token", 
+                "refresh_token": cfg["refresh_token"]
+            }
+            async with session.post(refresh_url, data=params) as resp:
+                data = await resp.json()
+                if "access_token" in data:
+                    cfg["token"] = data["access_token"]
+                    cfg["refresh_token"] = data.get("refresh_token", cfg["refresh_token"])
+                    save_cfg()
+                    print("Token successfully refreshed pre-boot!")
+                else:
+                    print("CRITICAL: Failed to refresh token pre-boot. Check your client credentials.", data)
+                    sys.exit(1)
+
 if __name__ == "__main__":
+    # Run the async token verification first
+    asyncio.run(pre_boot_refresh())
+
+    # Reload the configuration with the updated token before starting the bot
+    with open(CONFIG_FILE, "r") as f:
+        cfg = {**DEFAULT_CFG, **json.load(f)}
+
     bot = Bot(silent="-silent" in sys.argv)
     
-    # FIXED: Reordered mapping signature so 'bot' is passed explicitly to clean_shutdown
     signal.signal(signal.SIGINT, lambda sig, frame: clean_shutdown(bot, sig, frame))
     signal.signal(signal.SIGTERM, lambda sig, frame: clean_shutdown(bot, sig, frame))
     
