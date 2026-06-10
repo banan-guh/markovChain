@@ -102,8 +102,6 @@ int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping, d
 }
 
 int Markov::pick_random(std::map<int, int>& options, bool f, double damping, double context_entropy) {
-    std::vector<int> keys;
-    
     int max_weight = 0;
     for (auto const& pair : options) {
         if (pair.first != END && pair.first != START && pair.second > max_weight) {
@@ -111,30 +109,40 @@ int Markov::pick_random(std::map<int, int>& options, bool f, double damping, dou
         }
     }
 
+    // Build a flat pool: regular words get count entries (uniform within survivors),
+    // END/START get damping-scaled entries, giving -d gradual effect in random mode too.
+    std::vector<int> pool;
     for (auto const& pair : options) {
         if (f && pair.first == END && options.size() > 1) continue;
-        
-        // Damping override for eternal yapping
         if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
 
-        // Context Entropy pruning for random mode
         if (context_entropy > 0.0 && pair.first != END && pair.first != START) {
             if (pair.second < max_weight * context_entropy) continue;
         }
-        
-        keys.push_back(pair.first);
-    }
-    
-    // Fallback: If entropy criteria cleared the vector pool, populate cleanly ignoring structural markers if damped
-    if (keys.empty()) {
-        for (auto const& pair : options) {
-            if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
-            keys.push_back(pair.first);
+
+        if (pair.first == END || pair.first == START) {
+            int w = std::max(1, static_cast<int>(pair.second * damping));
+            for (int i = 0; i < w; i++) pool.push_back(pair.first);
+        } else {
+            for (int i = 0; i < pair.second; i++) pool.push_back(pair.first);
         }
     }
 
-    if (keys.empty()) return END;
-    return keys[get_rand_int(0, keys.size() - 1)];
+    // Fallback: entropy wiped the pool, retry ignoring entropy but keep damping
+    if (pool.empty()) {
+        for (auto const& pair : options) {
+            if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
+            if (pair.first == END || pair.first == START) {
+                int w = std::max(1, static_cast<int>(pair.second * damping));
+                for (int i = 0; i < w; i++) pool.push_back(pair.first);
+            } else {
+                for (int i = 0; i < pair.second; i++) pool.push_back(pair.first);
+            }
+        }
+    }
+
+    if (pool.empty()) return END;
+    return pool[get_rand_int(0, pool.size() - 1)];
 }
 
 std::string Markov::generate(int o, bool w, int c, bool r, bool f, double damping, double context_entropy) {
@@ -244,11 +252,11 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
                 std::map<int, int>& options = memory[fwd_state];
                 int next_id = w ? pick_weighted(options, f, damping, context_entropy) : pick_random(options, f, damping, context_entropy);
                 
-                if (next_id == END || next_id == -1) break;
-                
-                if (f && next_id == END) {
-                    if (vocabulary.size() > 2) next_id = get_rand_int(2, vocabulary.size() - 1);
-                    else break;
+                if (f && (next_id == END || next_id == -1)) {
+                  if (vocabulary.size() > 2) next_id = get_rand_int(2, vocabulary.size() - 1);
+                  else break;
+                } else if (next_id == END || next_id == -1) {
+                    break;
                 }
 
                 if (next_id >= 0 && next_id < vocabulary.size()) {
