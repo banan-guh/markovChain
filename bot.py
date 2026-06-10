@@ -264,9 +264,27 @@ class Bot(commands.Bot):
         seed = seeds[-1] if seeds else ""
 
         if seed:
-            res = self.bot_instance.generate_seeded(seed, 2, w, max_w, rev, infix, f, damping, context_entropy) or "0"
+            res = self.bot_instance.generate_seeded(
+                seed=seed, 
+                o=2, 
+                w=w, 
+                c=max_w, 
+                r=rev, 
+                infix=infix, 
+                f=f, 
+                damping=damping, 
+                context_entropy=context_entropy
+            ) or "0"
         else:
-            res = self.bot_instance.generate(2, w, max_w, rev, f, damping, context_entropy) or "0"
+            res = self.bot_instance.generate(
+                o=2, 
+                w=w, 
+                c=max_w, 
+                r=rev, 
+                f=f, 
+                damping=damping, 
+                context_entropy=context_entropy
+            ) or "0"
 
         if seed and res.strip() and not rev and not infix and res != seed: 
             res = f"{seed} {res}"
