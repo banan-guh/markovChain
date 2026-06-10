@@ -254,12 +254,8 @@ class Bot(commands.Bot):
             elif c == "-i": infix = True   
             elif c.startswith("-c") and c[2:].isdigit(): max_w = max(1, min(int(c[2:]), 75))
             elif c.startswith("-d"):        
-                try: 
-                    # Strip any trailing characters or spaces before casting
-                    val_str = c[2:].strip()
-                    damping = max(0.0, min(float(val_str), 1.0))
-                except Exception as e:
-                    print(f"[Debug Parsing Error] Failed to parse damping parameter: {e}")
+                try: damping = max(0.0, min(float(c[2:]), 1.0))
+                except: pass
             elif c.startswith("-e"):        
                 try: context_entropy = max(0.0, min(float(c[2:]), 1.0))
                 except: pass
