@@ -62,7 +62,7 @@ def save_brain(bot_ref):
     os.makedirs("./backups", exist_ok=True)
     
     cpp_engine = bot_ref.bot_instance
-    cpp_engine.save("./brain")
+    cpp_engine.save("./brain/")
     
     if os.path.exists("./brain/brain.dat.tmp"):
         if os.path.exists("./brain/brain.dat"):
