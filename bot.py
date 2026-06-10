@@ -61,27 +61,19 @@ def save_brain(bot_ref):
     os.makedirs("./brain", exist_ok=True)
     os.makedirs("./backups", exist_ok=True)
     
+    # Legacy text-saving methods
     cpp_engine = bot_ref.bot_instance
-    cpp_engine.save("./brain/")
-    
-    if os.path.exists("./brain/brain.dat.tmp"):
-        if os.path.exists("./brain/brain.dat"):
-            if os.path.exists("./brain/brain.dat.bak"):
-                os.remove("./brain/brain.dat.bak")
-            os.rename("./brain/brain.dat", "./brain/brain.dat.bak")
-        os.rename("./brain/brain.dat.tmp", "./brain/brain.dat")
-        
-    if os.path.exists("./brain/vocab.txt.tmp"):
-        if os.path.exists("./brain/vocab.txt"):
-            os.remove("./brain/vocab.txt")
-        os.rename("./brain/vocab.txt.tmp", "./brain/vocab.txt")
+    cpp_engine.save_txt("./brain/memory.dat", False)
+    cpp_engine.save_txt("./brain/reverse_memory.dat", True)
+    cpp_engine.save_vocab("./brain/vocab.txt")
 
+    # Keep your custom backup feature running on the legacy files
     now = datetime.now()
     date_str = now.strftime("%B").lower() + str(now.day)
-    backup_filename = f"./backups/brain_backup_{date_str}.dat"
+    backup_filename = f"./backups/memory_backup_{date_str}.dat"
     
-    if not os.path.exists(backup_filename) and os.path.exists("./brain/brain.dat"):
-        shutil.copy2("./brain/brain.dat", backup_filename)
+    if not os.path.exists(backup_filename) and os.path.exists("./brain/memory.dat"):
+        shutil.copy2("./brain/memory.dat", backup_filename)
 
 def clean_shutdown(bot_ref, sig, frame):
     if hasattr(bot_ref, 'autosave_task') and bot_ref.autosave_task:
@@ -159,7 +151,11 @@ class Bot(commands.Bot):
 
     async def event_ready(self):
         print(f"bot ready | joined: {', '.join(CHANNELS)}")
-        self.bot_instance.load("./brain")
+        
+        # Legacy individual file loading
+        self.bot_instance.load_vocab("./brain/vocab.txt")
+        self.bot_instance.load_txt("./brain/memory.dat", False)
+        self.bot_instance.load_txt("./brain/reverse_memory.dat", True)
         
         if hasattr(self, 'add_token') and cfg["refresh_token"]:
             try: await self.add_token(cfg["token"], cfg["refresh_token"])

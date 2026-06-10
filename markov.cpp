@@ -18,13 +18,11 @@ Markov::Markov() {
   word_to_id["[END]"] = END;
 }
 
-// FIXED: Added double damping to the implementation signature and internal loop math
 int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
   int total = 0;
   for (auto const& pair : options) {
     if (f && pair.first == END && options.size() > 1) continue;
     
-    // Apply damping to both structural termination flags
     if (pair.first == END || pair.first == START) {
       total += std::max(1, static_cast<int>(pair.second * damping));
     } else {
@@ -87,7 +85,6 @@ std::string Markov::generate(int o, bool w, int c, bool r, bool f, double dampin
   std::string result = "";
   for (int i = 0; i < c; i++) {
     
-    // --- DYNAMIC CONTEXT MIXING ---
     if (current_state.size() > 1 && ((double)rand() / RAND_MAX) < context_entropy) {
       current_state.erase(current_state.begin());
     }
@@ -117,9 +114,6 @@ std::string Markov::generate(int o, bool w, int c, bool r, bool f, double dampin
 std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool r, bool infix, bool f, double damping, double context_entropy) {
   std::string clean_seed = sanitize(seed);
   
-  // ==========================================
-  // BRANCH 1: INFIX GENERATION (-i flag)
-  // ==========================================
   if (infix) {
     if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuh";
     int seed_id = word_to_id[clean_seed];
@@ -128,7 +122,6 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
     std::string forward_part = "";
     int half_count = c / 2;
 
-    // 1. Backward Path (Left Side)
     std::vector<int> rev_state;
     for (auto const& pair : reverse_memory) {
       if (!pair.first.empty() && pair.first.back() == seed_id) { 
@@ -138,7 +131,6 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
     }
     if (!rev_state.empty()) {
       for (int i = 0; i < half_count; i++) {
-        // Context Entropy Check
         if (rev_state.size() > 1 && ((double)rand() / RAND_MAX) < context_entropy) {
           rev_state.erase(rev_state.begin());
         }
@@ -160,7 +152,6 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
       }
     }
 
-    // 2. Forward Path (Right Side)
     std::vector<int> fwd_state;
     for (auto const& pair : memory) {
       if (!pair.first.empty() && pair.first.back() == seed_id) { 
@@ -170,7 +161,6 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
     }
     if (!fwd_state.empty()) {
       for (int i = 0; i < half_count; i++) {
-        // Context Entropy Check
         if (fwd_state.size() > 1 && ((double)rand() / RAND_MAX) < context_entropy) {
           fwd_state.erase(fwd_state.begin());
         }
@@ -193,9 +183,6 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
     return backward_part + clean_seed + " " + forward_part;
   }
 
-  // ==========================================
-  // BRANCH 2: STANDARD REVERSE GENERATION (-r flag)
-  // ==========================================
   if (r) {
     int word_counter = 0;
     std::string result = "";
@@ -217,7 +204,6 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
     if (!found_start) return seed + " ";
 
     for (int i = 0; i < c; i++) {
-      // Context Entropy Check
       if (rev_state.size() > 1 && ((double)rand() / RAND_MAX) < context_entropy) {
         rev_state.erase(rev_state.begin());
       }
@@ -244,9 +230,6 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
     return (word_counter == 0) ? seed + " " : result + seed + " ";
   }
 
-  // ==========================================
-  // BRANCH 3: STANDARD SEEDED FORWARD GENERATION
-  // ==========================================
   std::stringstream ss(clean_seed);
   std::string word;
   std::vector<int> current_state(o, START);
@@ -259,7 +242,6 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
   int word_counter = 0;
   std::string result = "";
   for (int i = 0; i < c; i++) {
-    // Context Entropy Check
     if (current_state.size() > 1 && ((double)rand() / RAND_MAX) < context_entropy) {
       current_state.erase(current_state.begin());
     }
@@ -329,13 +311,18 @@ void Markov::train_from_file(std::string filename, int o) {
 }
 
 void Markov::save_brain(std::string folder_path) {
-    // 1. Keep your vocab.txt updated normally as plain text
+    // 1. FIXED: Implemented loop to write vocabulary strings to vocab.txt line-by-line
     std::ofstream vf(folder_path + "/vocab.txt");
-    // (Your existing loop that writes word strings to vocab.txt line-by-line)
-    vf.close();
+    if (vf.is_open()) {
+        for (const auto& word : vocabulary) {
+            vf << word << "\n";
+        }
+        vf.close();
+    }
 
     // 2. Write ONLY the integer maps to brain.dat in binary
     std::ofstream out(folder_path + "/brain.dat", std::ios::binary);
+    if (!out) return;
     
     auto save_bin = [&](const auto& matrix) {
         unsigned int m_size = matrix.size();
@@ -357,7 +344,6 @@ void Markov::save_brain(std::string folder_path) {
     out.close();
 }
 
-// Helper function to check if a file exists
 bool file_exists(const std::string& name) {
     struct stat buffer;   
     return (stat(name.c_str(), &buffer) == 0); 
@@ -369,24 +355,20 @@ void Markov::load_brain(std::string folder_path) {
     std::string m_path = folder_path + "/memory.dat";
     std::string rm_path = folder_path + "/reverse_memory.dat";
 
-    // Strict Guard: No vocab.txt = No run.
     if (!file_exists(v_path)) return; 
 
-    // =========================================================================
-    // STEP 1: ALWAYS LOAD VOCAB.TXT FIRST
-    // This populates your string-to-int maps so the integer matrices have meaning.
-    // =========================================================================
     std::ifstream vf(v_path); std::string line;
     word_to_id.clear();
+    vocabulary.clear(); // Ensure clean sync with vector indices
     int idx = 0;
     while (std::getline(vf, line)) {
-        if (!line.empty()) { word_to_id[line] = idx++; }
+        if (!line.empty()) { 
+            vocabulary.push_back(line);
+            word_to_id[line] = idx++; 
+        }
     }
     vf.close();
 
-    // =========================================================================
-    // CASE 1: brain.dat exists (Fast Path for Integer Matrices)
-    // =========================================================================
     if (file_exists(b_path)) {
         std::ifstream in(b_path, std::ios::binary);
         if (!in) return;
@@ -410,9 +392,6 @@ void Markov::load_brain(std::string folder_path) {
         return;
     }
 
-    // =========================================================================
-    // CASE 2: Fallback to text integer files (memory.dat & reverse_memory.dat)
-    // =========================================================================
     if (file_exists(m_path) && file_exists(rm_path)) {
         auto load_txt = [&](const std::string& path, auto& matrix) {
             std::ifstream f(path); int p_size, s_count, pid, sid, count;
@@ -425,7 +404,6 @@ void Markov::load_brain(std::string folder_path) {
         };
         load_txt(m_path, memory); load_txt(rm_path, reverse_memory);
         
-        // Save the pure integer structures into brain.dat for next time
         this->save_brain(folder_path); 
         return;
     }
