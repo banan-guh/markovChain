@@ -35,7 +35,7 @@ Markov::Markov() {
     word_to_id["[END]"] = END;
 }
 
-iint Markov::pick_weighted(std::map<int, int>& options, bool f, double damping, double context_entropy) {
+int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping, double context_entropy) {
     int max_weight = 0;
     for (auto const& pair : options) {
         if (pair.first != END && pair.first != START && pair.second > max_weight) {
