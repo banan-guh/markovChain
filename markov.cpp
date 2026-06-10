@@ -35,6 +35,63 @@ Markov::Markov() {
     word_to_id["[END]"] = END;
 }
 
+int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
+    int total = 0;
+    for (auto const& pair : options) {
+        if (f && pair.first == END && options.size() > 1) continue;
+        if (pair.first == END || pair.first == START) {
+            total += (damping == 0.0) ? 0 : std::max(1, static_cast<int>(pair.second * damping));
+        } else {
+            total += pair.second;
+        }
+    }
+    if (total <= 0) return END;
+
+    int roll = get_rand_int(0, total - 1);
+
+    for (auto const& pair : options) {
+      if (f && pair.first == END && options.size() > 1) continue;
+      int current_weight = (pair.first == END || pair.first == START) 
+                         ? ((damping == 0.0) ? 0 : std::max(1, static_cast<int>(pair.second * damping))) 
+                         : pair.second;
+
+    if (roll < current_weight) return pair.first;
+        roll -= current_weight;
+    }
+    return END;
+}
+
+int Markov::pick_random(std::map<int, int>& options, bool f, double damping) {
+    std::vector<int> keys;
+    for (auto const& pair : options) {
+        if (f && pair.first == END && options.size() > 1) continue;
+        if (damping == 0.0 && (pair.first == END || pair.first == START)) {
+            continue;
+        }
+        keys.push_back(pair.first);
+    }
+    if (keys.empty()) return END;
+    return keys[get_rand_int(0, keys.size() - 1)];
+}
+
+int Markov::get_id(std::string word) {
+    if (word_to_id.find(word) == word_to_id.end()) {
+        int new_id = vocabulary.size();
+        vocabulary.push_back(word);
+        word_to_id[word] = new_id;
+        return new_id;
+    }
+    return word_to_id[word];
+}
+
+std::string Markov::sanitize(std::string raw) {
+    std::string clean;
+    for (unsigned char c : raw) {
+        if (c >= 32 && c <= 126) clean += c;
+    }
+    return clean;
+}
+
 int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping, double context_entropy) {
     int max_weight = 0;
     for (auto const& pair : options) {
@@ -352,6 +409,140 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
         if (current_state.size() > o) current_state.erase(current_state.begin());
     }
     return result;
+}
+
+void Markov::train(std::string raw_message, int max_order) {
+    std::string clean = sanitize(raw_message);
+    if (clean.empty()) return;
+    
+    std::stringstream ss(clean);
+    std::string word;
+    std::vector<int> tokens;
+    for (int i = 0; i < max_order; i++) tokens.push_back(START);
+    while (ss >> word) tokens.push_back(get_id(word));
+    tokens.push_back(END);
+
+    for (size_t i = max_order; i < tokens.size(); i++) {
+        int suffix = tokens[i];
+        for (int o = 1; o <= max_order; o++) {
+            std::vector<int> prefix;
+            for (int j = o; j > 0; j--) prefix.push_back(tokens[i - j]);
+            memory[prefix][suffix]++;
+        }
+    }
+
+    std::vector<int> rev_tokens;
+    for (int i = 0; i < max_order; i++) rev_tokens.push_back(START);
+    std::vector<int> fwd(tokens.begin() + max_order, tokens.end());
+    std::reverse(fwd.begin(), fwd.end());
+    for (int id : fwd) rev_tokens.push_back(id);
+
+    for (size_t i = max_order; i < rev_tokens.size(); i++) {
+        int suffix = rev_tokens[i];
+        for (int o = 1; o <= max_order; o++) {
+            std::vector<int> prefix;
+            for (int j = o; j > 0; j--) prefix.push_back(rev_tokens[i - j]);
+            reverse_memory[prefix][suffix]++;
+        }
+    }
+}
+
+void Markov::train_from_file(std::string filename, int o) {
+    std::ifstream file(filename);
+    if (!file.is_open()) return;
+    std::string line;
+    while (std::getline(file, line)) {
+        if (!line.empty()) train(line, o);
+    }
+    file.close();
+}
+
+void Markov::save_brain(std::string folder) {
+    std::ofstream vocab_file(folder + "/vocab.txt");
+    if (!vocab_file.is_open()) return; 
+    
+    for (const auto& v : vocabulary) vocab_file << v << "\n";
+    vocab_file.close();
+
+    std::ofstream mem_file(folder + "/memory.dat");
+    if (!mem_file.is_open()) return;
+    for (auto it = memory.begin(); it != memory.end(); ++it) {
+        const std::vector<int>& prefix = it->first;
+        const std::map<int, int>& suffixes = it->second;
+        mem_file << prefix.size() << " ";
+        for (int id : prefix) mem_file << id << " ";
+        mem_file << suffixes.size() << " ";
+        for (auto const& s_pair : suffixes) mem_file << s_pair.first << " " << s_pair.second << " ";
+        mem_file << "\n";
+    }
+    mem_file.close();
+
+    std::ofstream rmem_file(folder + "/reverse_memory.dat");
+    if (!rmem_file.is_open()) return;
+    for (auto it = reverse_memory.begin(); it != reverse_memory.end(); ++it) {
+        const std::vector<int>& prefix = it->first;
+        const std::map<int, int>& suffixes = it->second;
+        rmem_file << prefix.size() << " ";
+        for (int id : prefix) rmem_file << id << " ";
+        rmem_file << suffixes.size() << " ";
+        for (auto const& s_pair : suffixes) rmem_file << s_pair.first << " " << s_pair.second << " ";
+        rmem_file << "\n";
+    }
+    rmem_file.close();
+}
+
+void Markov::load_brain(std::string folder) {
+    std::ifstream vocab_file(folder + "/vocab.txt");
+    if (!vocab_file.is_open()) return;
+    
+    vocabulary.clear();
+    word_to_id.clear();
+    std::string word;
+    while (std::getline(vocab_file, word)) {
+        int id = vocabulary.size();
+        vocabulary.push_back(word);
+        word_to_id[word] = id;
+    }
+    vocab_file.close();
+
+    memory.clear();
+    std::ifstream mem_file(folder + "/memory.dat");
+    int prefix_size, suffix_count;
+    if (mem_file.is_open()) {
+        while (mem_file >> prefix_size) {
+            std::vector<int> prefix;
+            for (int i = 0; i < prefix_size; i++) {
+                int id; mem_file >> id;
+                prefix.push_back(id);
+            }
+            mem_file >> suffix_count;
+            for (int i = 0; i < suffix_count; i++) {
+                int s_id, count;
+                mem_file >> s_id >> count;
+                memory[prefix][s_id] = count;
+            }
+        }
+        mem_file.close();
+    }
+
+    reverse_memory.clear();
+    std::ifstream rmem_file(folder + "/reverse_memory.dat");
+    if (rmem_file.is_open()) {
+        while (rmem_file >> prefix_size) {
+            std::vector<int> prefix;
+            for (int i = 0; i < prefix_size; i++) {
+                int id; rmem_file >> id;
+                prefix.push_back(id);
+            }
+            rmem_file >> suffix_count;
+            for (int i = 0; i < suffix_count; i++) {
+                int s_id, count;
+                rmem_file >> s_id >> count;
+                reverse_memory[prefix][s_id] = count;
+            }
+        }
+        rmem_file.close();
+    }
 }
 
 void Markov::purge(std::vector<std::string> blocked_words) {
