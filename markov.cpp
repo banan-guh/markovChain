@@ -126,7 +126,12 @@ std::string Markov::generate(int o, bool w, int c, bool r, bool f, double dampin
         current_state.push_back(next_id);
         if (current_state.size() > o) current_state.erase(current_state.begin());
     }
-    return result;
+    std::stringstream ss;
+    ss << "vocab size " << vocabulary.size() 
+       << " memory " << memory.size() 
+       << " reverse memory " << reverse_memory.size();
+    
+    return ss.str();
 }
 
 std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool r, bool infix, bool f, double damping, double context_entropy) {
