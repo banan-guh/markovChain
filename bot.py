@@ -284,7 +284,7 @@ class Bot(commands.Bot):
 
     @commands.command() 
     async def helpuuh(self, ctx): 
-        await self.safe_reply(ctx, "uuh [seed, w, r, i, f, c1-75, d0-1, e0-1], guh, checkuuh, brainfiles. admin 0 : addblock, removeblock, blockuser, unblockuser, addadmin, removeadmin, addtrainer, removetrainer, sleep, unsleep, train, stoptrain, traintime, killuuh, stats, cooldown 1s global, 0min uuh")
+        await self.safe_reply(ctx, "uuh [seed, w, r, i, f, c1-75, d0-1, e0-1], guh, bih, dailyreport, checkuuh, brainfiles. admin 0 : addblock, removeblock, blockuser, unblockuser, addadmin, removeadmin, addtrainer, removetrainer, sleep, unsleep, train, stoptrain, traintime, killuuh, debug, stats, cooldown 1s global, 0min uuh")
 
     @commands.command() 
     async def guh(self, ctx): await self.safe_reply(ctx, "SchizoUuh @ermugo1")
