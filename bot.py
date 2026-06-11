@@ -31,6 +31,50 @@ def save_cfg():
 
 bot_instance = markov_lib.MarkovBot()
 
+def parse_log_line(line):
+    parts = line.strip().split(" | ", 3)
+    if len(parts) != 4:
+        return None
+    timestamp_str, channel, author, content = parts
+    timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+    return {"timestamp": timestamp, "channel": channel, "author": author.lower(), "content": content}
+
+def format_training_data(log_path, output_path, target_user="ermugo1", window_seconds=45, min_context=2):
+    with open(log_path, "r", encoding="utf-8") as f:
+        lines = [parse_log_line(l) for l in f if l.strip()]
+    lines = [l for l in lines if l]
+
+    pairs = []
+    for i, msg in enumerate(lines):
+        if msg["author"] != target_user:
+            continue
+        # grab context window
+        context = []
+        for j in range(i - 1, -1, -1):
+            prev = lines[j]
+            if (msg["timestamp"] - prev["timestamp"]).total_seconds() > window_seconds:
+                break
+            if prev["author"] == target_user:
+                continue  # skip your own prior messages in context
+            context.insert(0, prev)
+        
+        if len(context) < min_context:
+            continue
+
+        context_str = "\n".join(f"{m['author']}: {m['content']}" for m in context)
+        pairs.append({
+            "messages": [
+                {"role": "user", "content": context_str},
+                {"role": "assistant", "content": msg["content"]}
+            ]
+        })
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        for pair in pairs:
+            f.write(json.dumps(pair) + "\n")
+
+    #print(f"wrote {len(pairs)} pairs to {output_path}")
+
 def track_monthly_words(message_text):
     month_file = "./brain/brain_month.txt"
     now = datetime.now()
@@ -112,10 +156,11 @@ class Bot(commands.Bot):
             bot_id=cfg["bot_id"],
             prefix=list(SPECIAL_CHARS),
             initial_channels=CHANNELS,
-            loop=asyncio.get_event_loop()
+            loop=asyncio.get_event_loop(),
         )
         self.silent, self.sleep, self.train_until, self.erm_bypass = silent, False, 0, True
         self.cd, self.cd_warned, self.last_sent, self.cmd_cd, self.global_cd = {}, set(), 0, 1, 1
+        self.last_jsonl_update = 0
         self.autosave_task = None
         self.bot_instance = bot_instance
 
@@ -192,9 +237,13 @@ class Bot(commands.Bot):
             in_window = (s <= curr < e) if s <= e else (curr >= s or curr < e)
             
             self.train_until = float('inf') if in_window else (0 if self.train_until == float('inf') else self.train_until)
-            if int(time.time()) % 120 < 10:
+            if int(time.time()) % 3600 < 10:
                 save_brain(self) # FIXED: Added positional self reference requirement
                 self.cd = {u: t for u, t in self.cd.items() if time.time() - t <= 600}
+            if time.time() - self.last_jsonl_update > 43200:  # 12 hours
+                format_training_data("./logs/chat_log.txt", "./training_data.jsonl")
+                self.last_jsonl_update = time.time()
+
 
     async def mod_list(self, ctx, key, args, add=True):
         if not self.is_admin(ctx.author.name.lower()) or not args: return
