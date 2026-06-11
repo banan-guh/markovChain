@@ -15,7 +15,7 @@ DEFAULT_CFG = {
     "admin_list": ["ermugo1", "ermugo2"], "user_blocklist": [], "train_list": [], "blocked_words": [], 
     "train_start": "15:00", "train_end": "10:00",
     "default_damping": 0.25,
-    "default_entropy": 0.05
+    "default_entropy": 0.2
 }
 
 try:
@@ -34,7 +34,7 @@ bot_instance = markov_lib.MarkovBot()
 def track_monthly_words(message_text):
     month_file = "./brain/brain_month.txt"
     now = datetime.now()
-    words = re.findall(r'\b\w+\b', message_text.lower())
+    words = re.findall(r'\b\w+\b', message_text)
     if not words:
         return
 
@@ -392,7 +392,7 @@ class Bot(commands.Bot):
             top_10_list = sorted_words[:10]
 
         if top_10_list:
-            inline_report = ", ".join([f"{i+1} {w} ({c} er)" for i, (w, c) in enumerate(top_10_list)])
+            inline_report = ", ".join([f"{i+1} {w} ({c} er )" for i, (w, c) in enumerate(top_10_list)])
         else:
             inline_report = "0 words this month SchizoUuh"
 
