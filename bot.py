@@ -107,17 +107,14 @@ def save_brain(bot_ref):
     
     # Legacy text-saving methods
     cpp_engine = bot_ref.bot_instance
-    cpp_engine.save("./brain/memory.dat")
-    cpp_engine.save("./brain/reverse_memory.dat")
-    cpp_engine.save("./brain/vocab.txt")
+    cpp_engine.save("./brain")
 
     # Keep your custom backup feature running on the legacy files
     now = datetime.now()
     date_str = now.strftime("%B").lower() + str(now.day)
-    backup_filename = f"./backups/memory_backup_{date_str}.dat"
-    
-    if not os.path.exists(backup_filename) and os.path.exists("./brain/memory.dat"):
-        shutil.copy2("./brain/memory.dat", backup_filename)
+    backup_folder = f"./backups/brain_backup_{date_str}"
+    if not os.path.exists(backup_folder):
+        shutil.copytree("./brain", backup_folder, dirs_exist_ok=False)
 
 def clean_shutdown(bot_ref, sig, frame):
     if hasattr(bot_ref, 'autosave_task') and bot_ref.autosave_task:
@@ -146,6 +143,47 @@ def clean_spam(text):
     text = re.sub(r'(.)\1{10,}', r'\1'*10, text)
     words = [w for w in text.split() if len(w) > 1] if sum(1 for w in text.split() if len(w) == 1) > 3 else text.split()
     return " ".join(words) or "uuh"
+
+def parse_uuh_flags(args):
+    opts = {
+        "w": False,
+        "f": False,
+        "rev": False,
+        "infix": False,
+        "max_w": 30,
+        "damping": cfg["default_damping"],
+        "context_entropy": cfg["default_entropy"],
+        "seed": "",
+    }
+    seeds = []
+
+    for a in args:
+        c = ''.join(ch for ch in a if ord(ch) < 128).strip()
+        if c == "-w":
+            opts["w"] = True
+        elif c == "-f":
+            opts["f"] = True
+        elif c == "-r":
+            opts["rev"] = True
+        elif c == "-i":
+            opts["infix"] = True
+        elif c.startswith("-c") and c[2:].isdigit():
+            opts["max_w"] = max(1, min(int(c[2:]), 75))
+        elif c.startswith("-d"):
+            try:
+                opts["damping"] = max(0.0, min(float(c[2:]), 1.0))
+            except ValueError:
+                pass
+        elif c.startswith("-e"):
+            try:
+                opts["context_entropy"] = max(0.0, min(float(c[2:]), 1.0))
+            except ValueError:
+                pass
+        elif c:
+            seeds.append(c)
+
+    opts["seed"] = seeds[-1] if seeds else ""
+    return opts
 
 class Bot(commands.Bot):
     def __init__(self, silent=False):
@@ -193,7 +231,7 @@ class Bot(commands.Bot):
             await ctx.reply(text)
             self.last_sent = time.time()
             return True
-        except: return False
+        except Exception: return False
 
     async def event_ready(self):
         print(f"bot ready | joined: {', '.join(CHANNELS)}")
@@ -203,7 +241,7 @@ class Bot(commands.Bot):
         
         if hasattr(self, 'add_token') and cfg["refresh_token"]:
             try: await self.add_token(cfg["token"], cfg["refresh_token"])
-            except: pass
+            except Exception: pass
 
         self.autosave_task = asyncio.create_task(self.autosave())
         if not self.silent:
@@ -248,8 +286,12 @@ class Bot(commands.Bot):
     async def mod_list(self, ctx, key, args, add=True):
         if not self.is_admin(ctx.author.name.lower()) or not args: return
         s = set(cfg[key])
-        changed = [a.lower() for a in args if (a.lower() not in s) == add]
-        cfg[key] = sorted(s | set(changed) if add else s - set(changed))
+        if add:
+            changed = [a.lower() for a in args if a.lower() not in s]
+            cfg[key] = sorted(s | set(changed))
+        else:
+            changed = [a.lower() for a in args if a.lower() in s]
+            cfg[key] = sorted(s - set(changed))
         if changed: save_cfg()
         await self.safe_reply(ctx, f"{'added' if add else 'removed'} {len(changed)} items {'1' if add else '0'}")
 
@@ -278,7 +320,7 @@ class Bot(commands.Bot):
     @commands.command()
     async def removeadmin(self, ctx, *a): 
         if ctx.author.name.lower() in ERMS: await self.mod_list(ctx, "admin_list", a, False) 
-
+    
     @commands.command()
     async def uuh(self, ctx, *args):
         u, now = ctx.author.name.lower(), time.time()
@@ -287,47 +329,38 @@ class Bot(commands.Bot):
                 self.cd_warned.add(u)
                 await self.safe_reply(ctx, "on cooldown uuh")
             return
-        self.cd_warned.discard(u); self.cd[u] = now
+        self.cd_warned.discard(u)
+        self.cd[u] = now
 
-        w, f, rev, infix = False, False, False, False
-        max_w = 30
-        damping = cfg["default_damping"]
-        context_entropy = cfg["default_entropy"]
-        seeds = []
-
-        for a in args:
-            c = ''.join(ch for ch in a if ord(ch) < 128).strip()
-            if c == "-w": w = True
-            elif c == "-f": f = True
-            elif c == "-r": rev = True
-            elif c == "-i": infix = True   
-            elif c.startswith("-c") and c[2:].isdigit(): max_w = max(1, min(int(c[2:]), 75))
-            elif c.startswith("-d"):        
-                try: damping = max(0.0, min(float(c[2:]), 1.0))
-                except: pass
-            elif c.startswith("-e"):        
-                try: context_entropy = max(0.0, min(float(c[2:]), 1.0))
-                except: pass
-            elif c: seeds.append(c)
-
-        seed = seeds[-1] if seeds else ""
+        opts = parse_uuh_flags(args)
+        seed = opts["seed"]
 
         if seed:
             # Order: seed, o, w, c, r, infix, f, damping, context_entropy
-            res = self.bot_instance.generate_seeded(seed, 2, w, max_w, rev, infix, f, damping, context_entropy) or "0"
+            res = self.bot_instance.generate_seeded(
+                seed, 2, opts["w"], opts["max_w"], opts["rev"], opts["infix"],
+                opts["f"], opts["damping"], opts["context_entropy"]
+            ) or "0"
         else:
             # Order: o, w, c, r, f, damping, context_entropy
-            res = self.bot_instance.generate(2, w, max_w, rev, f, damping, context_entropy) or "0"
+            res = self.bot_instance.generate(
+                2, opts["w"], opts["max_w"], opts["rev"],
+                opts["f"], opts["damping"], opts["context_entropy"]
+            ) or "0"
 
-        if seed and res.strip() and not rev and not infix and res != seed: 
+        if seed and res.strip() and not opts["rev"] and not opts["infix"] and res != seed:
             res = f"{seed} {res}"
-        
-        for b in cfg["blocked_words"]: res = re.sub(re.escape(b), "", res, flags=re.IGNORECASE)
-        res = clean_spam(" ".join((res[1:] if res and res[0] in SPECIAL_CHARS else res).split())) or (seed or "0")
+
+        for b in cfg["blocked_words"]:
+            res = re.sub(re.escape(b), "", res, flags=re.IGNORECASE)
+
+        if res and res[0] in SPECIAL_CHARS:
+            res = res[1:]
+        res = clean_spam(" ".join(res.split())) or seed or "0"
 
         msgs = textwrap.wrap(res, width=150, break_long_words=True) or ["0"]
         await self.safe_reply(ctx, msgs[0])
-        for m in msgs[1:]: 
+        for m in msgs[1:]:
             await asyncio.sleep(1)
             await ctx.reply(m)
 

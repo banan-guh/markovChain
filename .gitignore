@@ -27,3 +27,9 @@ markovChain.vcxproj.user
 wrapper.exp
 wrapper.lib
 compile.py
+.tio.tokens.json
+config.json
+/brain
+/backups
+*.dll
+/markov_lib.egg-info
