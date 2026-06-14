@@ -343,7 +343,7 @@ class Bot(commands.Bot):
                 opts["f"], opts["damping"], opts["context_entropy"]
             ) or "0"
         else:
-            # Order: o, w, c, r, f, damping, context_entropy
+            # Order: o, w, c, f, damping, context_entropy
             res = self.bot_instance.generate(
                 2, opts["w"], opts["max_words"],
                 opts["f"], opts["damping"], opts["context_entropy"]
