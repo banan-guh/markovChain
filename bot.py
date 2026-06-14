@@ -150,7 +150,7 @@ def parse_uuh_flags(args):
         "f": False,
         "rev": False,
         "infix": False,
-        "max_w": 30,
+        "max_words": 30,
         "damping": cfg["default_damping"],
         "context_entropy": cfg["default_entropy"],
         "seed": "",
@@ -168,7 +168,7 @@ def parse_uuh_flags(args):
         elif c == "-i":
             opts["infix"] = True
         elif c.startswith("-c") and c[2:].isdigit():
-            opts["max_w"] = max(1, min(int(c[2:]), 75))
+            opts["max_words"] = max(1, min(int(c[2:]), 75))
         elif c.startswith("-d"):
             try:
                 opts["damping"] = max(0.0, min(float(c[2:]), 1.0))
@@ -257,7 +257,7 @@ class Bot(commands.Bot):
         if not msg.echo and msg.author.name.lower() != self.nick.lower():
             track_monthly_words(content)
 
-        if not is_cmd and time.time() < self.train_until and author in cfg["train_list"]: self.bot_instance.train(content, 2)
+        if not is_cmd and time.time() < self.train_until and author not in cfg["train_list"]: self.bot_instance.train(content, 2)
         words = content.split()
         if len(words) > 3 and sum(1 for w in words if len(w)==1) / len(words) > 0.8: return
 
@@ -335,16 +335,17 @@ class Bot(commands.Bot):
         opts = parse_uuh_flags(args)
         seed = opts["seed"]
 
+        if opts["rev"] == True: opts["max_words"] = opts["max_words"] - 1
         if seed:
             # Order: seed, o, w, c, r, infix, f, damping, context_entropy
             res = self.bot_instance.generate_seeded(
-                seed, 2, opts["w"], opts["max_w"], opts["rev"], opts["infix"],
+                seed, 2, opts["w"], opts["max_words"], opts["rev"], opts["infix"],
                 opts["f"], opts["damping"], opts["context_entropy"]
             ) or "0"
         else:
             # Order: o, w, c, r, f, damping, context_entropy
             res = self.bot_instance.generate(
-                2, opts["w"], opts["max_w"], opts["rev"],
+                2, opts["w"], opts["max_words"],
                 opts["f"], opts["damping"], opts["context_entropy"]
             ) or "0"
 
