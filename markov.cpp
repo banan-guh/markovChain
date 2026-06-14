@@ -53,26 +53,50 @@ std::string Markov::sanitize(std::string raw) {
     return clean;
 }
 
-int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
-    int max_weight = 0;
-    for (auto const& pair : options) {
-        if (pair.first != END && pair.first != START && pair.second > max_weight) {
-            max_weight = pair.second;
-        }
+// Advances `state` by one token using either memory or reverse_memory.
+// Returns the chosen token id, or -2 if generation should stop.
+int Markov::iterate_chain(std::vector<int>& state, std::map<std::vector<int>, std::map<int, int>>& chain,
+                        bool o, bool w, bool r, bool f, double damping, double context_entropy) {
+    // stop token
+    int stop_token;
+    if (r) stop_token = word_to_id(START);
+    else stop_token = word_to_id(END);
+
+    // if context > 1 & entropy rolls a true, turn into context window = 1
+    if (state.size() > 1 && get_rand_double() < context_entropy) {
+        state.erase(state.begin());
+    }
+    // if state can't find the context, downgrade context size
+    while (chain.find(state) == chain.end() && !state.empty()) {
+        state.erase(state.begin());
+    }
+    if (state.empty()) return stop_token; // fallback
+
+    // get list of all things that happened before / after the context chosen
+    std::map<int, int>& options = chain[state];
+    
+    int next_id;
+    if (w) next_id = pick_weighted(options, f, damping);
+    else next_id = pick_random(options, f, damping);
+
+    if (next_id == stop_token) {
+        if (f && vocabulary.size() > 2) // f only runs if vocab size doesn't have only end token
+            next_id = get_rand_int(2, vocabulary.size() - 1); // get int between first / last word
+        else return stop_token; // fallback
     }
 
+    state.push_back(next_id);
+    if (state.size() > o) state.erase(state.begin());
+    return next_id;
+}
+
+int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
     int total = 0;
     for (auto const& pair : options) {
         if (f && pair.first == END && options.size() > 1) continue;
         
-        // Damping override for eternal yapping
-        if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
-
-        if (pair.first == END || pair.first == START) {
-            total += (damping == 0.0) ? 0 : std::max(1, static_cast<int>(pair.second * damping));
-        } else {
-            total += pair.second;
-        }
+        if (pair.first == END || pair.first == START) {}
+        total += pair.second;
     }
     if (total <= 0) return END;
 
@@ -94,27 +118,11 @@ int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
 
 int Markov::pick_random(std::map<int, int>& options, bool f, double damping) {
     std::vector<int> keys;
-    
-    int max_weight = 0;
-    for (auto const& pair : options) {
-        if (pair.first != END && pair.first != START && pair.second > max_weight) {
-            max_weight = pair.second;
-        }
-    }
 
     for (auto const& pair : options) {
         if (f && pair.first == END && options.size() > 1) continue;
         if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
         keys.push_back(pair.first);
-    }
-
-    // Fallback: entropy wiped the pool, retry keeping damping and f
-    if (keys.empty()) {
-        for (auto const& pair : options) {
-            if (f && pair.first == END && options.size() > 1) continue;  // f fix
-            if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
-            keys.push_back(pair.first);
-        }
     }
 
     if (keys.empty()) return END;
@@ -127,7 +135,7 @@ int Markov::pick_random(std::map<int, int>& options, bool f, double damping) {
     }
 }
 
-std::string Markov::generate(int o, bool w, int c, bool r, bool f, double damping, double context_entropy) {
+std::string Markov::generate(int o, bool w, int c, bool f, double damping, double context_entropy) {
     std::vector<int> current_state(o, START);
     int word_counter = 0;
     std::string result = "";
@@ -170,7 +178,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
     std::string clean_seed = sanitize(seed);
     
     if (infix) {
-        if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuh";
+        if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuhNAHH";
         int seed_id = word_to_id[clean_seed];
         
         std::string backward_part = "";
@@ -254,7 +262,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
     if (r) {
         int word_counter = 0;
         std::string result = "";
-        if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuh";
+        if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuhNAHH";
         int seed_id = word_to_id[clean_seed];
 
         std::vector<int> rev_state;
@@ -524,7 +532,6 @@ void Markov::purge(std::vector<std::string> blocked_words) {
         ++it;
     }
 
-    // Get the ID of the fallback string safely
     int uuh_id = get_id("uuh");
 
     // Cleanly link blocked keywords directly to the unified "uuh" token ID
