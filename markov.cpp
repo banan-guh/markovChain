@@ -1,3 +1,5 @@
+// TODO!!!: comment everything / make it more readable
+
 #include "markov.h"
 #include <iostream>
 #include <string>
@@ -11,23 +13,30 @@
 #include <fstream>
 #include <algorithm>
 
+
 // Reusable standard modern RNG engine
 static std::mt19937& get_rng() {
     static std::mt19937 gen(std::chrono::system_clock::now().time_since_epoch().count());
     return gen;
 }
 
+
+// From 0 to 1
 static double get_rand_double() {
     std::uniform_real_distribution<double> dist(0.0, 1.0);
     return dist(get_rng());
 }
 
+
+// Also from 0 to 1
 static int get_rand_int(int min, int max) {
     if (min > max) return min;
     std::uniform_int_distribution<int> dist(min, max);
     return dist(get_rng());
 }
 
+
+// Constructor
 Markov::Markov() {
     vocabulary.push_back("[START]");
     vocabulary.push_back("[END]");
@@ -35,6 +44,8 @@ Markov::Markov() {
     word_to_id["[END]"] = END;
 }
 
+
+// from word string (vocab.txt) to ID (used in memory / reverse_memory.dat)
 int Markov::get_id(std::string word) {
     if (word_to_id.find(word) == word_to_id.end()) {
         int new_id = vocabulary.size();
@@ -45,6 +56,7 @@ int Markov::get_id(std::string word) {
     return word_to_id[word];
 }
 
+
 std::string Markov::sanitize(std::string raw) {
     std::string clean;
     for (unsigned char c : raw) {
@@ -53,31 +65,74 @@ std::string Markov::sanitize(std::string raw) {
     return clean;
 }
 
-// Advances `state` by one token using either memory or reverse_memory.
-// Returns the chosen token id, or -2 if generation should stop.
-int Markov::iterate_chain(std::vector<int>& state, std::map<std::vector<int>, std::map<int, int>>& chain,
-                        bool o, bool w, bool r, bool f, double damping, double context_entropy) {
-    // stop token
+
+int Markov::pick_weighted(std::map<int, int>& options, bool f, int stop_token) { // damping deprecated
+    // NOTE: pair.first is word, pair.second is weight
+
+    int total = 0; // accumulate ceiling weight first
+    for (auto const& pair : options) { // push max weight up if not start/end
+        if (f && (pair.first == END || pair.first == START) && options.size() > 1) continue; // skip end tokens if -f
+        total += pair.second;
+    }
+    if (total <= 0) return stop_token;
+
+    // Roll dice, then walk down the road to see which neighborhood it lands in
+    int roll = get_rand_int(0, total - 1);
+    for (auto const& pair : options) {
+        if (f && (pair.first == END || pair.first == START) && options.size() > 1) continue; // skip if end token
+        if (roll < pair.second) return pair.first;
+        roll -= pair.second;
+    }
+    return stop_token;
+}
+
+
+int Markov::pick_random(std::map<int, int>& options, bool f, int stop_token) { // damping deprecated
+    // NOTE: pair.first is word, pair.second is weight
+    std::vector<int> keys;
+    for (auto const& pair : options) {
+        if (f && (pair.first == END || pair.first == START) && options.size() > 1) continue; // skip end tokens if -f
+        keys.push_back(pair.first);
+    }
+    if (keys.empty()) return stop_token;
+
+    // Roll dice (nothing else)
+    int roll = get_rand_int(0, keys.size() - 1);
+    return keys[roll];
+}
+
+
+// Advances `context_window` by one token using either memory or reverse_memory.
+// Returns the chosen token id (int).
+// Forwards / reverse compatibility decided by which memory you pass in.
+int Markov::iterate_chain(std::vector<int>& context_window, std::map<std::vector<int>, std::map<int, int>>& memory,
+                        int o, bool w, bool r, bool f, double damping, double context_entropy) {
+    // stop token - consts START, END declared at top
     int stop_token;
-    if (r) stop_token = word_to_id(START);
-    else stop_token = word_to_id(END);
+    if (r) stop_token = START;
+    else stop_token = END;
 
     // if context > 1 & entropy rolls a true, turn into context window = 1
-    if (state.size() > 1 && get_rand_double() < context_entropy) {
-        state.erase(state.begin());
+    if (context_window.size() > 1 && get_rand_double() < context_entropy) {
+        context_window.erase(context_window.begin());
     }
-    // if state can't find the context, downgrade context size
-    while (chain.find(state) == chain.end() && !state.empty()) {
-        state.erase(state.begin());
+    // if memory can't find the context, downgrade context size
+    while (memory.find(context_window) == memory.end() && !context_window.empty()) {
+        context_window.erase(context_window.begin());
     }
-    if (state.empty()) return stop_token; // fallback
+    if (context_window.empty()) return stop_token; // fallback
 
-    // get list of all things that happened before / after the context chosen
-    std::map<int, int>& options = chain[state];
+    // IMPORTANT: options is a KV list saying each possible word + frequency of occurence
+    std::map<int, int>& options = memory[context_window];
     
-    int next_id;
-    if (w) next_id = pick_weighted(options, f, damping);
-    else next_id = pick_random(options, f, damping);
+    int next_id = stop_token;
+    for (int i = 0; i < 3; i++) { // try 3 times max
+        if (w) next_id = pick_weighted(options, f, stop_token);
+        else next_id = pick_random(options, f, stop_token);
+        if (next_id != stop_token) break; // generate, then end if token is valid
+        
+        if (get_rand_double() < damping) break; // break after probability set by damping
+    }
 
     if (next_id == stop_token) {
         if (f && vocabulary.size() > 2) // f only runs if vocab size doesn't have only end token
@@ -85,271 +140,104 @@ int Markov::iterate_chain(std::vector<int>& state, std::map<std::vector<int>, st
         else return stop_token; // fallback
     }
 
-    state.push_back(next_id);
-    if (state.size() > o) state.erase(state.begin());
+    context_window.push_back(next_id); // pointer
+    if (context_window.size() > o) context_window.erase(context_window.begin()); // check for o (order) flag
     return next_id;
 }
 
-int Markov::pick_weighted(std::map<int, int>& options, bool f, double damping) {
-    int total = 0;
-    for (auto const& pair : options) {
-        if (f && pair.first == END && options.size() > 1) continue;
-        
-        if (pair.first == END || pair.first == START) {}
-        total += pair.second;
-    }
-    if (total <= 0) return END;
 
-    int roll = get_rand_int(0, total - 1);
-
-    for (auto const& pair : options) {
-        if (f && pair.first == END && options.size() > 1) continue;
-        if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
-
-        int current_weight = (pair.first == END || pair.first == START) 
-                             ? ((damping == 0.0) ? 0 : std::max(1, static_cast<int>(pair.second * damping))) 
-                             : pair.second;
-
-        if (roll < current_weight) return pair.first;
-        roll -= current_weight;
-    }
-    return END;
-}
-
-int Markov::pick_random(std::map<int, int>& options, bool f, double damping) {
-    std::vector<int> keys;
-
-    for (auto const& pair : options) {
-        if (f && pair.first == END && options.size() > 1) continue;
-        if (damping == 0.0 && (pair.first == END || pair.first == START)) continue;
-        keys.push_back(pair.first);
-    }
-
-    if (keys.empty()) return END;
-
-    // Pick uniformly, but treat damping as a rejection probability for END/START
-    while (true) {
-        int candidate = keys[get_rand_int(0, keys.size() - 1)];
-        if ((candidate == END || candidate == START) && get_rand_double() > damping) continue;
-        return candidate;
-    }
-}
-
-std::string Markov::generate(int o, bool w, int c, bool f, double damping, double context_entropy) {
-    std::vector<int> current_state(o, START);
-    int word_counter = 0;
+// generate without seed.
+// NOTE: context window fully managed by iterate_chain(context, memory, o, w, r, f, d, e).
+// 'c' arg is REQUIRED - pass in python with default.
+std::string Markov::generate(int o, bool w, int c, bool f, double damping, double entropy) {
+    std::vector<int> context_window(o, START);
     std::string result = "";
-    
+
     for (int i = 0; i < c; i++) {
-        if (current_state.size() > 1 && get_rand_double() < context_entropy) {
-            current_state.erase(current_state.begin());
-        }
+        int next_id = iterate_chain(context_window, memory, o, w, false, f, damping, entropy); // r is always false (physically impossible)
 
-        while (memory.find(current_state) == memory.end() && !current_state.empty()) {
-            current_state.erase(current_state.begin());
-        }
-        if (current_state.empty()) break;
-
-        std::map<int, int>& options = memory[current_state];
-        int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f, damping);
-        
-        if (f && (next_id == END || next_id == -1)) {
-            if (vocabulary.size() > 2) {
-                next_id = get_rand_int(2, vocabulary.size() - 1);
-            } else {
-                break;
-            }
-        } else if (next_id == END || next_id == -1) {
-            break;
-        }
-
-        if (next_id >= 0 && next_id < vocabulary.size()) {
-            result += vocabulary[next_id] + " ";
-        }
-        word_counter++;
-        
-        current_state.push_back(next_id);
-        if (current_state.size() > o) current_state.erase(current_state.begin());
+        if (next_id == END) break; // no multi-token handling, one way
+        result += vocabulary[next_id] + " "; // append word of id generated
+        // no context management, moved to iterate_chain
     }
     return result;
 }
 
-std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool r, bool infix, bool f, double damping, double context_entropy) {
+
+// o: order, c: max words, r: reverse, _i: infix, f: force
+// infix is _i because of for loops
+std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool r, bool _i, bool f, double damping, double entropy) {
     std::string clean_seed = sanitize(seed);
-    
-    if (infix) {
-        if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuhNAHH";
-        int seed_id = word_to_id[clean_seed];
-        
+    if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuhNAHH"; // early return in case of no match in data
+    int seed_id = word_to_id[clean_seed];
+
+    if (_i) {
         std::string backward_part = "";
         std::string forward_part = "";
         int half_count = c / 2;
 
-        std::vector<int> rev_state;
-        for (auto const& pair : reverse_memory) {
-            if (!pair.first.empty() && pair.first.back() == seed_id) { 
-                rev_state = pair.first; 
-                break; 
-            }
-        }
-        if (!rev_state.empty()) {
-            for (int i = 0; i < half_count; i++) {
-                if (rev_state.size() > 1 && get_rand_double() < context_entropy) {
-                    rev_state.erase(rev_state.begin());
-                }
-                while (reverse_memory.find(rev_state) == reverse_memory.end() && !rev_state.empty()) {
-                    rev_state.erase(rev_state.begin());
-                }
-                if (rev_state.empty()) break;
+        // backwards:
+        std::vector<int> back_context_window(o, END);
+        back_context_window.push_back(seed_id); // manage context window init
+            if (back_context_window.size() > o) back_context_window.erase(back_context_window.begin());
+        
+        for (int i = 0; i < half_count; i++) {
+            int next_id = iterate_chain(back_context_window, reverse_memory, o, w, true, f, damping, entropy);
 
-                std::map<int, int>& options = reverse_memory[rev_state];
-                int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f, damping);
-                
-                if (next_id == START || next_id == -1) break;
-                
-                if (f && next_id == END) {
-                    if (vocabulary.size() > 2) next_id = get_rand_int(2, vocabulary.size() - 1);
-                    else break;
-                } else if (next_id == END) {
-                    break;
-                }
-
-                if (next_id >= 0 && next_id < vocabulary.size()) {
-                    backward_part = vocabulary[next_id] + " " + backward_part;
-                }
-                rev_state.push_back(next_id);
-                if (rev_state.size() > o) rev_state.erase(rev_state.begin());
-            }
+            if (next_id == START) break; // reverse so START ends the chain
+            backward_part = vocabulary[next_id] + " " + backward_part; // append word of id generated, but backwards
         }
 
-        std::vector<int> fwd_state;
-        for (auto const& pair : memory) {
-            if (!pair.first.empty() && pair.first.back() == seed_id) { 
-                fwd_state = pair.first; 
-                break; 
-            }
-        }
-        if (!fwd_state.empty()) {
-            for (int i = 0; i < half_count; i++) {
-                if (fwd_state.size() > 1 && get_rand_double() < context_entropy) {
-                    fwd_state.erase(fwd_state.begin());
-                }
-                while (memory.find(fwd_state) == memory.end() && !fwd_state.empty()) {
-                    fwd_state.erase(fwd_state.begin());
-                }
-                if (fwd_state.empty()) break;
+        // forwards:
+        std::vector<int> fore_context_window(o, START);
+        fore_context_window.push_back(seed_id); // manage context window init
+            if (fore_context_window.size() > o) fore_context_window.erase(fore_context_window.begin());
+        
+        for (int i = 0; i < half_count; i++) {
+            int next_id = iterate_chain(fore_context_window, memory, o, w, false, f, damping, entropy);
 
-                std::map<int, int>& options = memory[fwd_state];
-                int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f, damping);
-                
-                if (f && (next_id == END || next_id == -1)) {
-                  if (vocabulary.size() > 2) next_id = get_rand_int(2, vocabulary.size() - 1);
-                  else break;
-                } else if (next_id == END || next_id == -1) {
-                    break;
-                }
-
-                if (next_id >= 0 && next_id < vocabulary.size()) {
-                    forward_part += vocabulary[next_id] + " ";
-                }
-                fwd_state.push_back(next_id);
-                if (fwd_state.size() > o) fwd_state.erase(fwd_state.begin());
-            }
+            if (next_id == END) break;
+            forward_part += vocabulary[next_id] + " "; // append word of id generated
         }
-        return backward_part + clean_seed + " " + forward_part;
+        return backward_part + " " + clean_seed + " " + forward_part;
     }
 
+    // reverse: (basically copy paste of _i)
     if (r) {
-        int word_counter = 0;
         std::string result = "";
-        if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuhNAHH";
-        int seed_id = word_to_id[clean_seed];
 
-        std::vector<int> rev_state;
-        bool found_start = false;
-
-        for (auto const& pair : reverse_memory) {
-            const std::vector<int>& state_vec = pair.first;
-            if (!state_vec.empty() && state_vec.back() == seed_id) {
-                rev_state = state_vec;
-                found_start = true;
-                break;
-            }
-        }
-
-        if (!found_start) return seed + " ";
-
+        // backwards:
+        std::vector<int> back_context_window(o, END);
+        back_context_window.push_back(seed_id); // manage context window init
+            if (back_context_window.size() > o) back_context_window.erase(back_context_window.begin());
+        
         for (int i = 0; i < c; i++) {
-            if (rev_state.size() > 1 && get_rand_double() < context_entropy) {
-                rev_state.erase(rev_state.begin());
-            }
-            while (reverse_memory.find(rev_state) == reverse_memory.end() && !rev_state.empty()) {
-                rev_state.erase(rev_state.begin());
-            }
-            if (rev_state.empty()) break;
+            int next_id = iterate_chain(back_context_window, reverse_memory, o, w, true, f, damping, entropy);
 
-            std::map<int, int>& options = reverse_memory[rev_state];
-            int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f, damping);
-
-            if (next_id == START || next_id == -1) break;
-            
-            if (f && next_id == END) {
-                if (vocabulary.size() > 2) next_id = get_rand_int(2, vocabulary.size() - 1);
-                else break;
-            } else if (next_id == END) {
-                break;
-            }
-
-            if (next_id >= 0 && next_id < vocabulary.size()) {
-                result = vocabulary[next_id] + " " + result;
-            }
-            word_counter++;
-
-            rev_state.push_back(next_id);
-            if (rev_state.size() > o) rev_state.erase(rev_state.begin());
+            if (next_id == START) break; // reverse so START ends the chain
+            result = vocabulary[next_id] + " " + result; // append word of id generated, but backwards
         }
-        return (word_counter == 0) ? seed + " " : result + seed + " ";
+        return result + " " + clean_seed;
     }
 
-    std::stringstream ss(clean_seed);
-    std::string word;
-    std::vector<int> current_state(o, START);
-    while (ss >> word) {
-        if (word_to_id.find(word) == word_to_id.end()) continue;
-        current_state.push_back(word_to_id[word]);
-        if (current_state.size() > o) current_state.erase(current_state.begin());
-    }
+    // forwards: (normal)
+    else {
+        std::string result = "";
 
-    int word_counter = 0;
-    std::string result = "";
-    for (int i = 0; i < c; i++) {
-        if (current_state.size() > 1 && get_rand_double() < context_entropy) {
-            current_state.erase(current_state.begin());
-        }
-        while (memory.find(current_state) == memory.end() && !current_state.empty()) {
-            current_state.erase(current_state.begin());
-        }
-        if (current_state.empty()) break;
-
-        std::map<int, int>& options = memory[current_state];
-        int next_id = w ? pick_weighted(options, f, damping) : pick_random(options, f, damping);
+        // forwards:
+        std::vector<int> context_window(o, START);
+        context_window.push_back(seed_id); // manage context window init
+            if (context_window.size() > o) context_window.erase(context_window.begin());
         
-        if (f && (next_id == END || next_id == -1)) {
-            if (vocabulary.size() > 2) next_id = get_rand_int(2, vocabulary.size() - 1);
-            else break;
-        } else if (next_id == END || next_id == -1) {
-            break;
-        }
+        for (int i = 0; i < c; i++) {
+            int next_id = iterate_chain(context_window, memory, o, w, false, f, damping, entropy);
 
-        if (next_id >= 0 && next_id < vocabulary.size()) {
-            result += vocabulary[next_id] + " ";
+            if (next_id == END) break;
+            result += vocabulary[next_id];
         }
-        word_counter++;
-        
-        current_state.push_back(next_id);
-        if (current_state.size() > o) current_state.erase(current_state.begin());
+        return result + " " + clean_seed;
     }
-    return result;
+    return "uuhNAHH"; // for sanity
 }
 
 void Markov::train(std::string raw_message, int max_order) {

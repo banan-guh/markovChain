@@ -424,8 +424,8 @@ class Bot(commands.Bot):
     @commands.command()
     async def checkuuh(self, ctx, user=None):
         u = (user or ctx.author.name).lower()
-        if u in ERMS: return await self.safe_reply(ctx, f"@{u} SchizoUuh")
-        sts = [s for c, s in [(u in cfg["user_blocklist"], "blocked uuh "), (u in cfg["admin_list"], "admin MONKA "), (u in cfg["train_list"], " 0")] if c]
+        if u in ERMS: return await self.safe_reply(ctx, f"{u} is a uuh")
+        sts = [s for c, s in [(u in cfg["user_blocklist"], "blocked uuhNAHH "), (u in cfg["admin_list"], "admin imsofuckingscared "), (u in cfg["train_list"], " 0")] if c]
         await self.safe_reply(ctx, f"{u} is {', '.join(sts) if sts else 'trusted ok'}")
 
     @commands.command()
