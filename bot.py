@@ -140,8 +140,14 @@ def clean_shutdown(bot_ref, sig, frame):
     sys.exit(0)
 
 def clean_spam(text):
-    text = re.sub(r'(.)\1{10,}', r'\1'*10, text)
-    words = [w for w in text.split() if len(w) > 1] if sum(1 for w in text.split() if len(w) == 1) > 3 else text.split()
+    text = re.sub(r'(.)\1{10,}', r'\1' * 10, text)
+
+    words = text.split()
+    single_char_count = sum(1 for w in words if len(w) == 1)
+
+    if single_char_count > 3:
+        words = [w for w in words if len(w) > 1]
+
     return " ".join(words) or "uuh"
 
 def parse_uuh_flags(args):
@@ -150,7 +156,7 @@ def parse_uuh_flags(args):
         "f": False,
         "rev": False,
         "infix": False,
-        "max_words": 30,
+        "max_words": 45,
         "damping": cfg["default_damping"],
         "context_entropy": cfg["default_entropy"],
         "seed": "",
@@ -359,7 +365,7 @@ class Bot(commands.Bot):
             res = res[1:]
         res = clean_spam(" ".join(res.split())) or seed or "0"
 
-        msgs = textwrap.wrap(res, width=150, break_long_words=True) or ["0"]
+        msgs = textwrap.wrap(res, width=250, break_long_words=True) or ["0"]
         await self.safe_reply(ctx, msgs[0])
         for m in msgs[1:]:
             await asyncio.sleep(1)
