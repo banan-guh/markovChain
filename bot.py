@@ -29,6 +29,9 @@ def save_cfg():
     with open(tmp, "w") as f: json.dump(cfg, f, indent=2)
     os.replace(tmp, CONFIG_FILE)
 
+def save_chat_log(): pass
+
+
 bot_instance = markov_lib.MarkovBot()
 
 def parse_log_line(line):
@@ -282,8 +285,8 @@ class Bot(commands.Bot):
             
             self.train_until = float('inf') if in_window else (0 if self.train_until == float('inf') else self.train_until)
             if int(time.time()) % 3600 < 10:
-                save_brain(self) # FIXED: Added positional self reference requirement
-                self.cd = {u: t for u, t in self.cd.items() if time.time() - t <= 600}
+                save_brain(self)
+                self.cd = {u: t for u, t in self.cd.items() if time.time() - t <= 600} # every 10 mins
             if time.time() - self.last_jsonl_update > 43200:  # 12 hours
                 format_training_data("./logs/chat_log.txt", "./training_data.jsonl")
                 self.last_jsonl_update = time.time()
@@ -356,7 +359,7 @@ class Bot(commands.Bot):
             ) or "0"
 
         if seed and res.strip() and not opts["rev"] and not opts["infix"] and res != seed:
-            res = f"{seed} {res}"
+            res = f"{res}" # fully handled by c++ now
 
         for b in cfg["blocked_words"]:
             res = re.sub(re.escape(b), "", res, flags=re.IGNORECASE)

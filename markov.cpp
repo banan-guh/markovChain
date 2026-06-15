@@ -126,7 +126,7 @@ int Markov::iterate_chain(std::vector<int>& context_window, std::map<std::vector
     std::map<int, int>& options = memory[context_window];
     
     int next_id = stop_token;
-    for (int i = 0; i < 3; i++) { // try 3 times max
+    for (int i = 0; i < 10; i++) { // try 10 times max
         if (w) next_id = pick_weighted(options, f, stop_token);
         else next_id = pick_random(options, f, stop_token);
         if (next_id != stop_token) break; // generate, then end if token is valid
@@ -157,7 +157,7 @@ std::string Markov::generate(int o, bool w, int c, bool f, double damping, doubl
         int next_id = iterate_chain(context_window, memory, o, w, false, f, damping, entropy); // r is always false (physically impossible)
 
         if (next_id == END) break; // no multi-token handling, one way
-        result += vocabulary[next_id] + " "; // append word of id generated
+        result += " " + vocabulary[next_id]; // append word of id generated
         // no context management, moved to iterate_chain
     }
     return result;
@@ -197,7 +197,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
             int next_id = iterate_chain(fore_context_window, memory, o, w, false, f, damping, entropy);
 
             if (next_id == END) break;
-            forward_part += vocabulary[next_id] + " "; // append word of id generated
+            forward_part += " " + vocabulary[next_id]; // append word of id generated
         }
         return backward_part + " " + clean_seed + " " + forward_part;
     }
@@ -232,10 +232,10 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
         for (int i = 0; i < c; i++) {
             int next_id = iterate_chain(context_window, memory, o, w, false, f, damping, entropy);
 
+            result += " " + vocabulary[next_id];
             if (next_id == END) break;
-            result += vocabulary[next_id];
         }
-        return result + " " + clean_seed;
+        return clean_seed + " " + result;
     }
     return "uuhNAHH"; // for sanity
 }
