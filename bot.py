@@ -78,29 +78,29 @@ def format_training_data(log_path, output_path, target_user="ermugo1", window_se
 
     #print(f"wrote {len(pairs)} pairs to {output_path}")
 
-def track_monthly_words(message_text):
-    month_file = "./brain/brain_month.txt"
+def track_weekly_words(message_text):
+    week_file = "./brain/brain_week.txt"
     now = datetime.now()
     words = re.findall(r'\b\w+\b', message_text)
     if not words:
         return
 
-    if os.path.exists(month_file):
-        mtime = datetime.fromtimestamp(os.path.getmtime(month_file))
+    if os.path.exists(week_file):
+        mtime = datetime.fromtimestamp(os.path.getmtime(week_file))
         if mtime.month != now.month or mtime.year != now.year:
-            try: os.remove(month_file)
+            try: os.remove(week_file)
             except OSError: pass
 
     counts = Counter()
-    if os.path.exists(month_file):
-        with open(month_file, "r", encoding="utf-8", errors="ignore") as f:
+    if os.path.exists(week_file):
+        with open(week_file, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 if " : " in line:
                     w, c = line.strip().split(" : ", 1)
                     counts[w] = int(c)
 
     counts.update(words)
-    with open(month_file, "w", encoding="utf-8") as f:
+    with open(week_file, "w", encoding="utf-8") as f:
         for w, c in counts.items():
             f.write(f"{w} : {c}\n")
 
@@ -194,6 +194,13 @@ def parse_uuh_flags(args):
     opts["seed"] = seeds[-1] if seeds else ""
     return opts
 
+def check_traintime():
+        now = time.localtime()
+        current_time = f"{now.tm_hour:02d}:{now.tm_min:02d}"
+        train_start, train_end = cfg["train_start"], cfg["train_end"]
+        
+        return (train_start <= current_time < train_end) if train_start <= train_end else (current_time >= train_start or current_time < train_end)
+
 class Bot(commands.Bot):
     def __init__(self, silent=False):
         super().__init__(
@@ -263,8 +270,8 @@ class Bot(commands.Bot):
         is_cmd = content and content[0] in SPECIAL_CHARS
 
         # Track vocabulary changes per month asynchronously in background log
-        if not msg.echo and msg.author.name.lower() != self.nick.lower():
-            track_monthly_words(content)
+        if not msg.echo and msg.author.name.lower() != self.nick.lower() and check_traintime():
+            track_weekly_words(content)
 
         if not is_cmd and time.time() < self.train_until and author not in cfg["train_list"]: self.bot_instance.train(content, 2)
         words = content.split()
@@ -278,16 +285,18 @@ class Bot(commands.Bot):
     async def autosave(self):
         while True:
             await asyncio.sleep(10)
-            now = time.localtime()
-            curr = f"{now.tm_hour:02d}:{now.tm_min:02d}"
-            s, e = cfg["train_start"], cfg["train_end"]
-            in_window = (s <= curr < e) if s <= e else (curr >= s or curr < e)
             
-            self.train_until = float('inf') if in_window else (0 if self.train_until == float('inf') else self.train_until)
+            # Check if we're in the training window
+            in_window = check_traintime()
+            self.train_until = float('inf') if in_window else 0
+            
+            # Save brain every hour
             if int(time.time()) % 3600 < 10:
                 save_brain(self)
-                self.cd = {u: t for u, t in self.cd.items() if time.time() - t <= 600} # every 10 mins
-            if time.time() - self.last_jsonl_update > 43200:  # 12 hours
+                self.cd = {u: t for u, t in self.cd.items() if time.time() - t <= 600}
+            
+            # Update training data every 12 hours
+            if time.time() - self.last_jsonl_update > 43200:
                 format_training_data("./logs/chat_log.txt", "./training_data.jsonl")
                 self.last_jsonl_update = time.time()
 
@@ -295,14 +304,18 @@ class Bot(commands.Bot):
     async def mod_list(self, ctx, key, args, add=True):
         if not self.is_admin(ctx.author.name.lower()) or not args: return
         s = set(cfg[key])
+        cleaned_args = [a.encode('ascii', 'ignore').decode('ascii').lower() for a in args]
         if add:
-            changed = [a.lower() for a in args if a.lower() not in s]
+            changed = [a.lower() for a in cleaned_args if a not in s]
             cfg[key] = sorted(s | set(changed))
         else:
-            changed = [a.lower() for a in args if a.lower() in s]
+            changed = [a.lower() for a in cleaned_args if a in s]
             cfg[key] = sorted(s - set(changed))
         if changed: save_cfg()
         await self.safe_reply(ctx, f"{'added' if add else 'removed'} {len(changed)} items {'1' if add else '0'}")
+
+    @commands.command()
+    async def checktraintimerightnow(self, ctx): await self.safe_reply(ctx, f"{check_traintime()}")
 
     @commands.command()
     async def addblock(self, ctx, *a): await self.mod_list(ctx, "blocked_words", a, True)
@@ -376,13 +389,21 @@ class Bot(commands.Bot):
 
     @commands.command() 
     async def helpuuh(self, ctx): 
-        await self.safe_reply(ctx, "uuh [seed, w, r, i, f, c1-75, d0-1, e0-1], guh, bih, dailyreport, checkuuh, brainfiles. admin 0 : addblock, removeblock, blockuser, unblockuser, addadmin, removeadmin, addtrainer, removetrainer, sleep, unsleep, train, stoptrain, traintime, killuuh, debug, stats, cooldown 1s global, 0min uuh")
+        await self.safe_reply(ctx, "uuh [seed, w, r, i, f, c1-75, d0-1, e0-1], guh, bih, weeklyreport, checkuuh, brainfiles. admin 0 : addblock, removeblock, blockuser, unblockuser, addadmin, removeadmin, addtrainer, removetrainer, sleep, unsleep, train, stoptrain, traintime, killuuh, debug, stats, cooldown 1s global, 0min uuh")
 
     @commands.command() 
-    async def guh(self, ctx): await self.safe_reply(ctx, "SchizoUuh @ermugo1")
+    async def guh(self, ctx, *args):
+        if args:
+            last_arg = args[-1]
+            await self.safe_reply(ctx, f"SchizoUuh @{last_arg}")
+        else: await self.safe_reply(ctx, "SchizoUuh @ermugo1")
 
     @commands.command() 
-    async def bih(self, ctx): await self.safe_reply(ctx, "SchizoUuh @ermugo1")
+    async def bih(self, ctx, *args):
+        if args:
+            last_arg = args[-1]
+            await self.safe_reply(ctx, f"SchizoUuh @{last_arg}")
+        else: await self.safe_reply(ctx, "SchizoUuh @ermugo1")
     
     @commands.command() 
     async def sleep(self, ctx):
@@ -467,13 +488,13 @@ class Bot(commands.Bot):
         else: await ctx.reply("unknown setting uuh")
 
     @commands.command()
-    async def dailyreport(self, ctx):
-        month_file = "./brain/brain_month.txt"
+    async def weeklyreport(self, ctx):
+        week_file = "./brain/brain_week.txt"
         top_10_list = []
 
-        if os.path.exists(month_file):
+        if os.path.exists(week_file):
             counts = {}
-            with open(month_file, "r", encoding="utf-8", errors="ignore") as f:
+            with open(week_file, "r", encoding="utf-8", errors="ignore") as f:
                 for line in f:
                     if " : " in line:
                         w, c = line.strip().split(" : ", 1)
