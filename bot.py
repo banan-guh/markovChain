@@ -111,6 +111,7 @@ def clean_shutdown(bot_ref, sig, frame):
         pass
 
     if bot_ref.loop and bot_ref.loop.is_running():
+        bot_ref.loop.call_soon_threadsafe(lambda: bot_ref.loop.set_exception_handler(lambda l, c: None))
         bot_ref.loop.call_soon_threadsafe(bot_ref.loop.stop)
 
 def clean_spam(text):
