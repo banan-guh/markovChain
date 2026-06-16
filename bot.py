@@ -110,7 +110,8 @@ def clean_shutdown(bot_ref, sig, frame):
     except Exception:
         pass
 
-    sys.exit(0)
+    if bot_ref.loop and bot_ref.loop.is_running():
+        bot_ref.loop.call_soon_threadsafe(bot_ref.loop.stop)
 
 def clean_spam(text):
     text = re.sub(r'(.)\1{10,}', r'\1' * 10, text)
