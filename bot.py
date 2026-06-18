@@ -188,6 +188,7 @@ class Bot(commands.Bot):
         self.cd, self.cd_warned, self.last_sent, self.cmd_cd, self.global_cd = {}, set(), 0, 1, 1
         self.last_jsonl_update = 0
         self.autosave_task = None
+        self.refresh_task = None
         self.bot_instance = bot_instance
 
     async def event_token_expired(self):
@@ -232,9 +233,12 @@ class Bot(commands.Bot):
             except Exception: pass
 
         self.autosave_task = asyncio.create_task(self.autosave())
+        self.refresh_task = asyncio.create_task(self.daily_token_refresh())
         if not self.silent:
-            for ch in filter(None, map(self.get_channel, CHANNELS)):
-                await ch.send("Aloo bot is online 0")
+            for ch in filter(None, map(self.get_channel, CHANNELS)): pass
+                #if ch.name.lower() == "vedal987":
+                    #continue
+                #await ch.send("Aloo bot is online 0")
 
     async def event_message(self, msg):
         if msg.echo or msg.author.name.lower() in {"streamelements", "nightbot", "moobot", "fossabot", self.nick.lower()}: return
@@ -271,6 +275,22 @@ class Bot(commands.Bot):
             if time.time() - self.last_jsonl_update > 3600:
                 format_training_data("./logs/chat_log.txt", "./training_data.jsonl")
                 self.last_jsonl_update = time.time()
+    
+
+    async def daily_token_refresh(self):
+        while True:
+            await asyncio.sleep(86400)  # 24h
+            print("Daily token refresh: validating + refreshing...")
+            try:
+                await pre_boot_refresh()                # updates cfg["token"] / cfg["refresh_token"]
+                await self.close()
+                self._http.token = cfg["token"]          # patch HTTP client's token
+                self._connection._token = cfg["token"]   # patch IRC websocket's token
+                self._http.session = None                # force a fresh aiohttp session (old one is closed)
+                await self.connect()
+                print("Reconnected with refreshed token.")
+            except Exception as e:
+                print(f"Daily token refresh failed: {e}")
 
 
     async def mod_list(self, ctx, key, args, add=True):
@@ -406,7 +426,8 @@ class Bot(commands.Bot):
         if self.is_admin(ctx.author.name.lower()): 
             save_cfg()
             save_brain(self) # FIXED: Appended instance requirement parameters
-            await ctx.reply("SadCat saving and shutting down...")
+            if target_channel and target_channel.name.lower() != "vedal987":
+                await ctx.reply("SadCat saving and shutting down...")
             await self.close()
 
     @commands.command() 
