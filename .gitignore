@@ -33,3 +33,7 @@ config.json
 /backups
 *.dll
 /markov_lib.egg-info
+/venv/
+/__pycache__
+*.exp
+*.lib

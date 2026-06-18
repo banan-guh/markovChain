@@ -60,7 +60,7 @@ int Markov::get_id(std::string word) {
 std::string Markov::sanitize(std::string raw) {
     std::string clean;
     for (unsigned char c : raw) {
-        if (c >= 32 && c <= 126) clean += c;
+        if (c >= 32) clean += c; // removed, now supports all unicode / emoji
     }
     return clean;
 }
