@@ -139,7 +139,8 @@ def parse_uuh_flags(args):
     seeds = []
 
     for a in args:
-        c = ''.join(ch for ch in a if ord(ch) < 128).strip()
+        #c = ''.join(ch for ch in a if ord(ch) < 128).strip()
+        c = a.strip()
         if c == "-w":
             opts["w"] = True
         elif c == "-f":
@@ -164,6 +165,7 @@ def parse_uuh_flags(args):
             seeds.append(c)
 
     opts["seed"] = seeds[-1] if seeds else ""
+    opts["max_words"] = opts["max_words"] - 1 # shoehorn fix, real issue is in c++ lib
     return opts
 
 def check_traintime():
@@ -349,7 +351,6 @@ class Bot(commands.Bot):
         opts = parse_uuh_flags(args)
         seed = opts["seed"]
 
-        if opts["rev"] == True: opts["max_words"] = opts["max_words"] - 1
         if seed:
             # Order: seed, o, w, c, r, infix, f, damping, context_entropy
             res = self.bot_instance.generate_seeded(
@@ -426,8 +427,9 @@ class Bot(commands.Bot):
         if self.is_admin(ctx.author.name.lower()): 
             save_cfg()
             save_brain(self) # FIXED: Appended instance requirement parameters
-            if target_channel and target_channel.name.lower() != "vedal987":
-                await ctx.reply("SadCat saving and shutting down...")
+            #if target_channel and target_channel.name.lower() != "vedal987":
+                #await ctx.reply("SadCat saving and shutting down...")
+            print("Shutting down...")
             await self.close()
 
     @commands.command() 
