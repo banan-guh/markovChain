@@ -93,23 +93,25 @@ def clean_shutdown(bot_ref, sig, frame):
     if hasattr(bot_ref, 'autosave_task') and bot_ref.autosave_task:
         bot_ref.autosave_task.cancel()
 
-    if bot_ref.loop and bot_ref.loop.is_running():
+    #if bot_ref.loop and bot_ref.loop.is_running():
         # Grabs the first live channel configured instead of using a placeholder string
-        target_channel = bot_ref.get_channel(CHANNELS[0])
-        if target_channel:
-            asyncio.run_coroutine_threadsafe(
-                target_channel.send("SadCat saving and shutting down..."), 
-                bot_ref.loop
-            )
-            time.sleep(0.2)
+        #target_channel = bot_ref.get_channel(CHANNELS[0])
+        #if target_channel:
+            #asyncio.run_coroutine_threadsafe(
+                #target_channel.send("SadCat saving and shutting down..."), 
+                #bot_ref.loop
+            #)
+            #time.sleep(0.2)
 
     try:
         save_brain(bot_ref)
         if hasattr(bot_ref, 'save_cfg'):
             bot_ref.save_cfg()
+            print("Shutting down...")
+        else: print("Shutting down... save_cfg failed")
     except Exception:
-        pass
-
+        print("Shutting down... Exception, failed to save.")
+    
     if bot_ref.loop and bot_ref.loop.is_running():
         bot_ref.loop.call_soon_threadsafe(lambda: bot_ref.loop.set_exception_handler(lambda l, c: None))
         bot_ref.loop.call_soon_threadsafe(bot_ref.loop.stop)
