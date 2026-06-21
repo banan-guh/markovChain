@@ -37,3 +37,5 @@ config.json
 /__pycache__
 *.exp
 *.lib
+.venv
+*.so

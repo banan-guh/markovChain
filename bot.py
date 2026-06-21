@@ -78,11 +78,9 @@ def save_brain(bot_ref):
     os.makedirs("./brain", exist_ok=True)
     os.makedirs("./backups", exist_ok=True)
     
-    # Legacy text-saving methods
     cpp_engine = bot_ref.bot_instance
     cpp_engine.save("./brain")
 
-    # Keep your custom backup feature running on the legacy files
     now = datetime.now()
     date_str = now.strftime("%B").lower() + str(now.day)
     backup_folder = f"./backups/brain_backup_{date_str}"
@@ -95,14 +93,14 @@ def clean_shutdown(bot_ref, sig, frame):
 
     try:
         save_brain(bot_ref)
-        bot_ref.save_cfg()
+        save_cfg()
         print("Shutting down...")
         if hasattr(bot_ref, 'autosave_task') and bot_ref.autosave_task:
             bot_ref.autosave_task.cancel()
         if hasattr(bot_ref, 'refresh_task') and bot_ref.refresh_task:
             bot_ref.refresh_task.cancel()
-    except Exception:
-        print("Shutting down... Exception, failed to save.")
+    except Exception as e:
+        print(f"Shutting down... Exception, failed to save: {e}")
     
     if bot_ref.loop and bot_ref.loop.is_running():
         bot_ref.loop.call_soon_threadsafe(lambda: bot_ref.loop.set_exception_handler(lambda l, c: None))
@@ -133,7 +131,7 @@ def parse_uuh_flags(args):
     seeds = []
 
     for a in args:
-        #c = ''.join(ch for ch in a if ord(ch) < 128).strip()
+        #c = ''.join(ch for ch in a if ord(ch) < 128).strip() # old handling, no unicode
         c = a.strip()
         if c == "-w":
             opts["w"] = True
@@ -165,8 +163,13 @@ def parse_uuh_flags(args):
 def check_traintime():
         now = time.localtime()
         current_time = f"{now.tm_hour:02d}:{now.tm_min:02d}"
-        train_start, train_end = cfg["train_start"], cfg["train_end"]
+        def pad_time(t):
+            h, m = t.strip().split(":")
+            return f"{int(h):02d}:{int(m):02d}"
         
+        train_start = pad_time(cfg["train_start"])
+        train_end = pad_time(cfg["train_end"])
+        #print(f"DEBUG traintime: now={current_time}, start={train_start}, end={train_end}")
         return (train_start <= current_time < train_end) if train_start <= train_end else (current_time >= train_start or current_time < train_end)
 
 class Bot(commands.Bot):
@@ -241,7 +244,7 @@ class Bot(commands.Bot):
         author, content = msg.author.name.lower(), msg.content
         is_cmd = content and content[0] in SPECIAL_CHARS
 
-        # Track vocabulary changes per month asynchronously in background log
+        # Track vocabulary changes per week asynchronously in background log
         if not msg.echo and msg.author.name.lower() != self.nick.lower() and check_traintime():
             track_weekly_words(content)
 
@@ -256,7 +259,7 @@ class Bot(commands.Bot):
 
     async def autosave(self):
         while True:
-            await asyncio.sleep(10)
+            await asyncio.sleep(86400)
             
             # Check if we're in the training window
             in_window = check_traintime()
@@ -275,8 +278,10 @@ class Bot(commands.Bot):
 
     async def daily_token_refresh(self):
         while True:
-            await asyncio.sleep(86400) # 1 day (86400s)
+            await asyncio.sleep(10) # 1 day (86400s)
             print("Daily token refresh: validating + refreshing...")
+            print("==================================================")
+            print("==================================================")
             try:
                 await pre_boot_refresh()
                 await self.close()
@@ -284,8 +289,13 @@ class Bot(commands.Bot):
                 self._connection._token = cfg["token"]
                 self._http.session = aiohttp.ClientSession()
                 await self.connect()
+                print("==================================================")
+                print("==================================================")
+                print("Don't mind the error! it's harmless.")
                 print("Reconnected with refreshed token.")
             except Exception as e:
+                print("==================================================")
+                print("==================================================")
                 print(f"Daily token refresh failed: {e}")
 
 
