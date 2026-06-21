@@ -272,13 +272,13 @@ class Bot(commands.Bot):
             
             # Update training data every hour
             if time.time() - self.last_jsonl_update > 3600:
-                format_training_data("./logs/chat_log.txt", "./training_data.jsonl")
+                #format_training_data("./logs/chat_log.txt", "./training_data.jsonl") # stub
                 self.last_jsonl_update = time.time()
     
 
     async def daily_token_refresh(self):
         while True:
-            await asyncio.sleep(10) # 1 day (86400s)
+            await asyncio.sleep(86400) # 1 day (86400s)
             print("Daily token refresh: validating + refreshing...")
             print("==================================================")
             print("==================================================")
