@@ -281,14 +281,14 @@ class Bot(commands.Bot):
 
     async def daily_token_refresh(self):
         while True:
-            await asyncio.sleep(86400)  # 24h
+            await asyncio.sleep(86400) # 1 day (86400s)
             print("Daily token refresh: validating + refreshing...")
             try:
-                await pre_boot_refresh()                # updates cfg["token"] / cfg["refresh_token"]
+                await pre_boot_refresh()
                 await self.close()
-                self._http.token = cfg["token"]          # patch HTTP client's token
-                self._connection._token = cfg["token"]   # patch IRC websocket's token
-                self._http.session = None                # force a fresh aiohttp session (old one is closed)
+                self._http.token = cfg["token"]
+                self._connection._token = cfg["token"]
+                self._http.session = aiohttp.ClientSession()
                 await self.connect()
                 print("Reconnected with refreshed token.")
             except Exception as e:
