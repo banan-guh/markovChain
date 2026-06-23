@@ -231,9 +231,9 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
         
         for (int i = 0; i < c; i++) {
             int next_id = iterate_chain(context_window, memory, o, w, false, f, damping, entropy);
-
-            result += " " + vocabulary[next_id];
+            
             if (next_id == END) break;
+            result += " " + vocabulary[next_id];
         }
         return clean_seed + " " + result;
     }

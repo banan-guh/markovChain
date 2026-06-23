@@ -172,6 +172,13 @@ def check_traintime():
         #print(f"DEBUG traintime: now={current_time}, start={train_start}, end={train_end}")
         return (train_start <= current_time < train_end) if train_start <= train_end else (current_time >= train_start or current_time < train_end)
 
+def restart_bot(self):
+    save_brain(self)
+    save_cfg()
+    print(f"Restarting... executable: {sys.executable}, args: {sys.argv}")
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+    print("This should never print")
+
 class Bot(commands.Bot):
     def __init__(self, silent=False):
         super().__init__(
@@ -192,18 +199,7 @@ class Bot(commands.Bot):
 
     async def event_token_expired(self):
         print("Token expired! Attempting automatic refresh...")
-        url = "https://id.twitch.tv/oauth2/token"
-        params = {"client_id": cfg["client_id"], "client_secret": cfg["client_secret"], "grant_type": "refresh_token", "refresh_token": cfg["refresh_token"]}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, data=params) as resp:
-                data = await resp.json()
-                if "access_token" in data:
-                    cfg["token"], cfg["refresh_token"] = data["access_token"], data.get("refresh_token", cfg["refresh_token"])
-                    save_cfg()
-                    print("Token successfully refreshed!")
-                    return cfg["token"]
-                print("Failed to auto-refresh token:", data)
-                sys.exit(1)
+        restart_bot(self)
 
     async def event_token_refreshed(self, payload):
         cfg["token"], cfg["refresh_token"] = payload.token, payload.refresh_token
@@ -259,7 +255,7 @@ class Bot(commands.Bot):
 
     async def autosave(self):
         while True:
-            await asyncio.sleep(86400)
+            await asyncio.sleep(5)
             
             # Check if we're in the training window
             in_window = check_traintime()
@@ -278,25 +274,26 @@ class Bot(commands.Bot):
 
     async def daily_token_refresh(self):
         while True:
-            await asyncio.sleep(86400) # 1 day (86400s)
+            await asyncio.sleep(7200) # 1 day (86400s) # changed to 2 hours, 7200s
             print("Daily token refresh: validating + refreshing...")
-            print("==================================================")
-            print("==================================================")
-            try:
-                await pre_boot_refresh()
-                await self.close()
-                self._http.token = cfg["token"]
-                self._connection._token = cfg["token"]
-                self._http.session = aiohttp.ClientSession()
-                await self.connect()
-                print("==================================================")
-                print("==================================================")
-                print("Don't mind the error! it's harmless.")
-                print("Reconnected with refreshed token.")
-            except Exception as e:
-                print("==================================================")
-                print("==================================================")
-                print(f"Daily token refresh failed: {e}")
+            restart_bot(self)
+            # print("==================================================")
+            # print("==================================================")
+            # try:
+            #     await pre_boot_refresh()
+            #     await self.close()
+            #     self._http.token = cfg["token"]
+            #     self._connection._token = cfg["token"]
+            #     self._http.session = aiohttp.ClientSession()
+            #     await self.connect()
+            #     print("==================================================")
+            #     print("==================================================")
+            #     print("Don't mind the error! it's harmless.")
+            #     print("Reconnected with refreshed token.")
+            # except Exception as e:
+            #     print("==================================================")
+            #     print("==================================================")
+            #     print(f"Daily token refresh failed: {e}")
 
 
     async def mod_list(self, ctx, key, args, add=True):
