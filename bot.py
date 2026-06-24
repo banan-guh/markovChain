@@ -137,7 +137,6 @@ def parse_uuh_flags(args):
         INVISIBLE = {0x034F, 0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0xFEFF, 0x00AD}
         c = "".join(ch for ch in a.strip() if ord(ch) not in INVISIBLE)
         c = c.strip()
-        print(f"[DEBUG parse] a: {repr(a)}, c: {repr(c)}, empty: {not c}")
         if not c:
             continue
         if c == "-w":
@@ -360,11 +359,6 @@ class Bot(commands.Bot):
 
         opts = parse_uuh_flags(args)
         seed = opts["seed"]
-
-        if seed:
-            print(f"[DEBUG seeded] repr(args): {repr(args)}, seed: {repr(seed)}")
-        else:
-            print(f"[DEBUG unseeded] repr(args): {repr(args)}, seed: {repr(seed)}")
 
         if seed:
             # Order: seed, o, w, c, r, infix, f, damping, context_entropy
