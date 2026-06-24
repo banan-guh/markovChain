@@ -4,6 +4,7 @@ import markov_lib
 from datetime import datetime
 import time, asyncio, re, os, json, signal, sys, shutil, textwrap, aiohttp
 from collections import Counter
+import unicodedata
 
 CONFIG_FILE = "config.json"
 CHANNELS = ["ermugo2", "vedal987"]
@@ -44,7 +45,7 @@ def dict_to_jsonl(entry_dict):
 
 def save_training_data():
     jsonl_line = ""
-    
+
 
 
 bot_instance = markov_lib.MarkovBot()
@@ -131,10 +132,14 @@ def parse_uuh_flags(args):
         "seed": "",
     }
     seeds = []
-
+    
     for a in args:
-        #c = ''.join(ch for ch in a if ord(ch) < 128).strip() # old handling, no unicode
-        c = a.strip()
+        INVISIBLE = {0x034F, 0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0xFEFF, 0x00AD}
+        c = "".join(ch for ch in a.strip() if ord(ch) not in INVISIBLE)
+        c = c.strip()
+        print(f"[DEBUG parse] a: {repr(a)}, c: {repr(c)}, empty: {not c}")
+        if not c:
+            continue
         if c == "-w":
             opts["w"] = True
         elif c == "-f":
@@ -246,7 +251,9 @@ class Bot(commands.Bot):
         if not msg.echo and msg.author.name.lower() != self.nick.lower() and check_traintime():
             track_weekly_words(content)
 
-        if not is_cmd and time.time() < self.train_until and author not in cfg["train_list"]: self.bot_instance.train(content, 2)
+        if not is_cmd and time.time() < self.train_until and author not in cfg["train_list"]:
+            if len(content.strip().split()) > 1:
+                self.bot_instance.train(content, 2)
         words = content.split()
         if len(words) > 3 and sum(1 for w in words if len(w)==1) / len(words) > 0.8: return
 
@@ -353,6 +360,11 @@ class Bot(commands.Bot):
 
         opts = parse_uuh_flags(args)
         seed = opts["seed"]
+
+        if seed:
+            print(f"[DEBUG seeded] repr(args): {repr(args)}, seed: {repr(seed)}")
+        else:
+            print(f"[DEBUG unseeded] repr(args): {repr(args)}, seed: {repr(seed)}")
 
         if seed:
             # Order: seed, o, w, c, r, infix, f, damping, context_entropy

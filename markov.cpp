@@ -168,6 +168,7 @@ std::string Markov::generate(int o, bool w, int c, bool f, double damping, doubl
 // infix is _i because of for loops
 std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool r, bool _i, bool f, double damping, double entropy) {
     std::string clean_seed = sanitize(seed);
+    if (clean_seed.empty()) return "uuhNAHH";
     if (word_to_id.find(clean_seed) == word_to_id.end()) return "uuhNAHH"; // early return in case of no match in data
     int seed_id = word_to_id[clean_seed];
 
