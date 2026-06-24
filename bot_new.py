@@ -72,7 +72,7 @@ class Bot(commands.AutoBot):
     async def setup_hook(self) -> None:
         print("setup_hook is running!")
         try:
-            comp = Moderation(self)
+            comp = MainCmds(self)
             print(f"Moderation created: {comp}")
             await self.add_component(comp)
             print("Component added successfully!")

@@ -42,7 +42,9 @@ def parse_message(msg):
 def dict_to_jsonl(entry_dict):
     return json.dumps(entry_dict) + "\n"
 
-def save_training_data(): pass
+def save_training_data():
+    jsonl_line = ""
+    
 
 
 bot_instance = markov_lib.MarkovBot()
@@ -115,7 +117,7 @@ def clean_spam(text):
     if single_char_count > 3:
         words = [w for w in words if len(w) > 1]
 
-    return " ".join(words) or "uuh"
+    return " ".join(words) or "uuh filtered"
 
 def parse_uuh_flags(args):
     opts = {
