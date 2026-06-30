@@ -285,24 +285,6 @@ class Bot(commands.Bot):
             await asyncio.sleep(7200) # 1 day (86400s) # changed to 2 hours, 7200s
             print("Daily token refresh: validating + refreshing...")
             restart_bot(self)
-            # print("==================================================")
-            # print("==================================================")
-            # try:
-            #     await pre_boot_refresh()
-            #     await self.close()
-            #     self._http.token = cfg["token"]
-            #     self._connection._token = cfg["token"]
-            #     self._http.session = aiohttp.ClientSession()
-            #     await self.connect()
-            #     print("==================================================")
-            #     print("==================================================")
-            #     print("Don't mind the error! it's harmless.")
-            #     print("Reconnected with refreshed token.")
-            # except Exception as e:
-            #     print("==================================================")
-            #     print("==================================================")
-            #     print(f"Daily token refresh failed: {e}")
-
 
     async def mod_list(self, ctx, key, args, add=True):
         if not self.is_admin(ctx.author.name.lower()) or not args: return
@@ -379,8 +361,8 @@ class Bot(commands.Bot):
         for b in cfg["blocked_words"]:
             res = re.sub(re.escape(b), "", res, flags=re.IGNORECASE)
 
-        if res and res[0] in SPECIAL_CHARS:
-            res = res[1:]
+        #if res and res[0] in SPECIAL_CHARS:
+            #res = res[1:]
         res = clean_spam(" ".join(res.split())) or seed or "0"
 
         msgs = textwrap.wrap(res, width=250, break_long_words=True) or ["0"]
@@ -490,6 +472,25 @@ class Bot(commands.Bot):
             await ctx.reply(f"global default entropy set to {cfg['default_entropy']}")
         elif cmd == "bypass": self.erm_bypass = not self.erm_bypass; await ctx.reply(f"bypass disabled: {self.erm_bypass}")
         else: await ctx.reply("unknown setting uuh")
+
+    @commands.command()
+    async def vanish(self, ctx):#http://localhost:4343/oauth/callback
+        BROADCASTER_TOKEN = cfg["token"]
+
+        try:
+            broadcaster = await ctx.channel.user()
+
+            await broadcaster.timeout_user(
+                token=BROADCASTER_TOKEN,
+                moderator_id=broadcaster.id,
+                user_id=ctx.author.id,
+                duration=1,
+                reason=""
+            )
+
+        except twitchio.HTTPException as e:
+            print(f"failed to timeout: {e}")
+        
 
     @commands.command()
     async def weeklyreport(self, ctx):
