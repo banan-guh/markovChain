@@ -10,6 +10,9 @@ import twitchio
 from twitchio import eventsub
 from twitchio.ext import commands
 
+import config
+from components.Moderation import Moderation
+
 
 if TYPE_CHECKING:
     import sqlite3
@@ -20,31 +23,7 @@ import time, asyncio, re, os, json, signal, sys, shutil, textwrap, aiohttp
 from collections import Counter
 
 
-# --- INITIAL SETUP ---
-CONFIG_FILE = "config.json"
-CHANNELS = ["ermugo2"]
-ERMS = {"ermugo1", "ermugo2"}
-SPECIAL_CHARS = set("!#$%^&*()_+-=[]{}|;':\",./<>?`~\\")
-
-DEFAULT_CFG = {
-    "client_id": "", "client_secret": "", "token": "", "refresh_token": "", "bot_id": "1468479097",
-    "admin_list": ["ermugo1", "ermugo2"], "user_blocklist": [], "train_list": [], "blocked_words": [], 
-    "train_start": "15:00", "train_end": "10:00",
-    "default_damping": 0.25,
-    "default_entropy": 0.2
-}
-
-try:
-    with open(CONFIG_FILE, "r") as f:
-        cfg = {**DEFAULT_CFG, **json.load(f)}
-except FileNotFoundError:
-    cfg = DEFAULT_CFG.copy()
-
-def save_cfg():
-    tmp = f"{CONFIG_FILE}.tmp"
-    with open(tmp, "w") as f: json.dump(cfg, f, indent=2)
-    os.replace(tmp, CONFIG_FILE)
-# --- END OF CFG ---
+# CFG moved to its own file
 
 
 LOGGER: logging.Logger = logging.getLogger("Bot")
@@ -57,11 +36,11 @@ class Bot(commands.AutoBot):
         self.token_database = token_database
 
         super().__init__(
-            client_id=cfg["client_id"],
-            client_secret=cfg["client_secret"],
-            bot_id=cfg["bot_id"],
-            owner_id=cfg["bot_id"], # boilerplate
-            prefix="!",#list(SPECIAL_CHARS),
+            client_id=config.cfg["client_id"],
+            client_secret=config.cfg["client_secret"],
+            bot_id=config.cfg["bot_id"],
+            owner_id=config.cfg["bot_id"], # boilerplate
+            prefix=list(config.SPECIAL_CHARS),
             subscriptions=subs,
             force_subscribe=True,
         )
@@ -70,16 +49,16 @@ class Bot(commands.AutoBot):
     # async def setup_hook(self) -> None: # OOP hell (wtf is this boilerplate) edit: I take it back
     #     await self.add_component(Moderation(self))
     async def setup_hook(self) -> None:
-        print("setup_hook is running!")
-        try:
-            comp = MainCmds(self)
-            print(f"Moderation created: {comp}")
-            await self.add_component(comp)
-            print("Component added successfully!")
-        except Exception as e:
-            print(f"Error adding component: {e}")
-            import traceback
-            traceback.print_exc()
+        component_list = [MainCmds(self), Moderation(self)]
+        LOGGER.info("setup_hook is running!")
+        for comp in component_list:
+            try:
+                await self.add_component(comp)
+                LOGGER.info("Component added successfully!")
+            except Exception as e:
+                LOGGER.warning(f"Error adding component: {e}")
+                import traceback
+                traceback.print_exc()
 
 
     # executes when successful init
@@ -126,8 +105,6 @@ class Bot(commands.AutoBot):
         LOGGER.info("Successfully logged in as: %s", self.bot_id)
 
 
-
-# component for admin, whitelist, blacklist, traintime, other boilerplate. boring crap
 class MainCmds(commands.Component):
     def __init__(self, bot: Bot) -> None:
         self.bot = bot
@@ -135,20 +112,7 @@ class MainCmds(commands.Component):
     @commands.Component.listener()
     async def event_message(self, payload: twitchio.ChatMessage) -> None:
         print(f"Message received: {payload.text}")
-    
-    @commands.command(aliases=["guh", "bih"])
-    async def schizoUuh(self, ctx: commands.Context, username: str = None) -> None:
-        print("called function")
-        if username is None:
-            username = ctx.chatter.name
-        else:
-            username = username.lstrip("@")
 
-        try:
-            user = await self.bot.fetch_user(username)
-            await ctx.send(f"SchizoUuh {user.mention}")
-        except Exception:
-            await ctx.send(f"uuh who is {username} ???")
 
 
 # all this is witchcraft, just don't touch it, it just works...
@@ -158,7 +122,7 @@ async def setup_database(db: asqlite.Pool) -> tuple[list[tuple[str, str]], list[
         await connection.execute(query)
 
         # fetch existing tokens
-        rows: list[sqlite3.Row] = await connection.fetchall("""SELECT * from tokens""")
+        rows: list[sqlite3.Row] = await connection.fetchall("""SELECT * FROM tokens""")
 
         tokens: list[tuple[str, str]] = []
         subs: list[eventsub.SubscriptionPayload] = []
@@ -166,10 +130,10 @@ async def setup_database(db: asqlite.Pool) -> tuple[list[tuple[str, str]], list[
         for row in rows:
             tokens.append((row["token"], row["refresh"]))
 
-            if row["user_id"] == cfg["bot_id"]:
+            if row["user_id"] == config.cfg["bot_id"]:
                 continue
             
-            subs.extend([eventsub.ChatMessageSubscription(broadcaster_user_id=row["user_id"], user_id=BOT_ID)])
+            subs.extend([eventsub.ChatMessageSubscription(broadcaster_user_id=row["user_id"], user_id=config.cfg["bot_id"])])
 
     return tokens, subs
 
@@ -180,8 +144,8 @@ async def get_user_ids(bot: Bot, usernames: list[str]) -> list[str]:
     return [user.id for user in users]
 
 async def handle_irc_message(channel: str, username: str, message: str) -> None:
-    #print(f"[IRC #{channel}] {username}: {message}")
-    print(message)
+    print(f"[IRC #{channel}] {username}: {message}")
+    #print(message)
 
 
 # main entry point for bot
@@ -199,12 +163,12 @@ def main() -> None:
                 for pair in tokens:
                     await bot.add_token(*pair)
                 
-                irc_reader = AnonymousIRCReader("vedal987", on_message=handle_irc_message)
+                #irc_reader = AnonymousIRCReader("vedal987", on_message=handle_irc_message)
             
                 #await bot.start(load_tokens=False)
                 await asyncio.gather(
                     bot.start(load_tokens=False),
-                    irc_reader.start(),
+                    #irc_reader.start(),
                 )
     
     try:

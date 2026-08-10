@@ -28,7 +28,7 @@ wrapper.exp
 wrapper.lib
 compile.py
 .tio.tokens.json
-config.json
+config*.json
 /brain
 /backups
 *.dll
