@@ -1,8 +1,8 @@
-import json, os
+import json, os, logging
 
 CONFIG_FILE = "config.json"
 ERMS = {"ermugo1", "ermugo2"}
-SPECIAL_CHARS = set("!$%^&*()_+-=[]{}|;':\",./<>?`~\\")
+SPECIAL_CHARS = set("!@$%^&*()_+-=[]{}|;':\",./<>?`~\\")
 
 DEFAULT_CFG = {
     "client_id": "",
@@ -14,8 +14,15 @@ DEFAULT_CFG = {
     "dont_trainlist": [],
     "blocked_words": [], 
     "default_damping": 0.25,
-    "default_entropy": 0.2
+    "default_entropy": 0.2,
+    "training": False,
+    "cooldown": 0,
+    "start_time": [16, 30],
+    "end_time": [10, 0],
+    "sleep": False
 }
+
+LOGGER: logging.Logger = logging.getLogger("Bot")
 
 def save_cfg():
     tmp = f"{CONFIG_FILE}.tmp"

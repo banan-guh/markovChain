@@ -30,4 +30,4 @@ RUNNING bot_new.py (INDEV!!):
 - get asqlite (pip install asqlite), get twitchio v3 (not v2, pip install twitchio works fine)
 - run it (don't forget to build the C++ - doesn't matter rn because bot_new.py isn't connected to markov)
 
-http://localhost:4343/oauth?scopes=channel:bot+user:read:chat+user:write:chat
+http://localhost:4343/oauth?scopes=user:read:chat%20user:write:chat%20user:bot&force_verify=true

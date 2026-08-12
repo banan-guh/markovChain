@@ -153,7 +153,7 @@ std::string Markov::generate(int o, bool w, int c, bool f, double damping, doubl
     std::vector<int> context_window(o, START);
     std::string result = "";
 
-    for (int i = 0; i < c; i++) {
+    for (int i = 1; i < c; i++) {
         int next_id = iterate_chain(context_window, memory, o, w, false, f, damping, entropy); // r is always false (physically impossible)
 
         if (next_id == END) break; // no multi-token handling, one way
@@ -176,6 +176,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
         std::string backward_part = "";
         std::string forward_part = "";
         int half_count = c / 2;
+        int other_half = c - half_count;
 
         // backwards:
         std::vector<int> back_context_window(o, END);
@@ -194,7 +195,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
         fore_context_window.push_back(seed_id); // manage context window init
             if (fore_context_window.size() > o) fore_context_window.erase(fore_context_window.begin());
         
-        for (int i = 0; i < half_count; i++) {
+        for (int i = 0; i < other_half; i++) {
             int next_id = iterate_chain(fore_context_window, memory, o, w, false, f, damping, entropy);
 
             if (next_id == END) break;
@@ -212,7 +213,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
         back_context_window.push_back(seed_id); // manage context window init
             if (back_context_window.size() > o) back_context_window.erase(back_context_window.begin());
         
-        for (int i = 0; i < c; i++) {
+        for (int i = 1; i < c; i++) {
             int next_id = iterate_chain(back_context_window, reverse_memory, o, w, true, f, damping, entropy);
 
             if (next_id == START) break; // reverse so START ends the chain
@@ -230,7 +231,7 @@ std::string Markov::generate_seeded(std::string seed, int o, bool w, int c, bool
         context_window.push_back(seed_id); // manage context window init
             if (context_window.size() > o) context_window.erase(context_window.begin());
         
-        for (int i = 0; i < c; i++) {
+        for (int i = 1; i < c; i++) {
             int next_id = iterate_chain(context_window, memory, o, w, false, f, damping, entropy);
             
             if (next_id == END) break;
