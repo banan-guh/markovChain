@@ -9,6 +9,7 @@ import markov_lib
 
 
 markov_bot = markov_lib.MarkovBot()
+markov_bot.load("./brain")
 
 
 message_buffer: list[str] = []
@@ -16,6 +17,7 @@ time_last_commit = datetime.now()
 
 
 def save_brain():
+    train_from_buffer(message_buffer)
     os.makedirs("./brain", exist_ok=True)
     os.makedirs("./backups", exist_ok=True)
     
@@ -43,7 +45,14 @@ def moderate_spam(text):
     return " ".join(words) or "uuh . . . . . ."
 
 
+def train_from_buffer(train_buffer) -> None:
+    LOGGER.info(f"Committing {len(message_buffer)} chats to markov.")
+    for msg in message_buffer: markov_bot.train(msg, 3)
+    message_buffer.clear()
+
+
 def train_guard(message, userid, is_live) -> None: # rename maybe?
+    global time_last_commit
     if message[0] in config.SPECIAL_CHARS: return
     if len(message.strip().split()) < 2: return # if word is 1 emote spam, don't train
     if userid in cfg["dont_trainlist"]: return
@@ -53,9 +62,7 @@ def train_guard(message, userid, is_live) -> None: # rename maybe?
         if is_live: message_buffer.clear()
         else:
             time_last_commit = datetime.now()
-            LOGGER.info(f"Committing {len(message_buffer)} chats to markov.")
-            for msg in message_buffer: markov_bot.train(msg, 3)
-            message_buffer.clear()
+            train_from_buffer(message_buffer)
 
 
 class Markov(commands.Component):
@@ -76,7 +83,7 @@ class Markov(commands.Component):
 
     @commands.Component.listener()
     async def event_message(self, payload: twitchio.ChatMessage) -> None:
-        train_guard(payload.text, payload.chatter.id, False) # this is less bloat (for now)
+        train_guard(payload.text, payload.chatter.id, is_live=False) # this is less bloat (for now)
         # TODO: replace False with real live checking
 
 
@@ -102,13 +109,13 @@ class Markov(commands.Component):
         if seed:
             # Order: seed, o, w, c, r, infix, f, damping, context_entropy
             result = self.markov_bot.generate_seeded(
-                seed, 3, weighted, max_words, reverse, infix,
+                seed, 2, weighted, int(max_words), reverse, infix,
                 force, damping, entropy
             ) or "0 gen seeded did not work"
         else:
             # Order: o, w, c, f, damping, context_entropy
             result = self.markov_bot.generate(
-                3, weighted, max_words,
+                2, weighted, int(max_words),
                 force, damping, entropy
             ) or "0 gen did not work"
 

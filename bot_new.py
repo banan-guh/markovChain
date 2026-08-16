@@ -64,7 +64,14 @@ class Bot(commands.AutoBot):
         print(f"{payload.chatter.name}: {payload.text}")
         words = payload.text.split()
         # TODO: finish this
-        #if "ass" in word.lower() for word in words: ctx
+        if any("ass" in word.lower() for word in words):
+            await payload.respond("huh ass")
+        if any("yeah" in word.lower() for word in words):
+            for i in range(0, 3):
+                await payload.respond("yeah")
+                #delay(1000)
+        #if words[0] == "#p":
+            #await payload.respond("#p")
         await super().event_message(payload)
 
 
@@ -167,11 +174,16 @@ class MainCmds(commands.Component):
         st = config.cfg["start_time"]
         en = config.cfg["start_time"]
         now = datetime.now()
-        time_str = str(now.hour) + ":" + str(now.minute)
+        time_str = str(now.hour) + ":" + str(now.minute).zfill(2)
         if is_time_between(time(st[0], st[1]), time(en[0], en[1])):
             await ctx.reply(f"kuh yea, time is {time_str}")
         else:
-            await ctx.reply(f"uuh despair0 VoteNay , time is {time_str}")
+            await ctx.reply(f"kuj despair0 VoteNay , time is {time_str}")
+    
+
+    @commands.command()
+    async def say(self, ctx: commands.Context, say_str: str) -> None:
+        await ctx.send(say_str)
 
 
 
