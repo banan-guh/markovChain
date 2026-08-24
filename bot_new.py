@@ -15,6 +15,7 @@ from config import LOGGER
 from components.Moderation import Moderation
 import components.Markov
 from components.Markov import Markov
+from components.Farm import Farm
 
 import parser
 
@@ -23,8 +24,8 @@ if TYPE_CHECKING:
     import sqlite3
 
 
-from datetime import datetime, time
-import asyncio, re, os, json, signal, sys, shutil, textwrap, aiohttp
+from datetime import datetime, time, timedelta
+import asyncio, re, os, json, signal, sys, shutil, textwrap, aiohttp, math
 from collections import Counter
 from functools import partial
 
@@ -41,6 +42,7 @@ def is_time_between(begin_time, end_time, check_time=None):
         return check_time >= begin_time or check_time <= end_time
 
 
+
 class Bot(commands.AutoBot):
     def __init__(self, *, token_database: asqlite.Pool, subs: list[eventsub.SubscriptionPayload]) -> None:
         self.token_database = token_database
@@ -49,7 +51,7 @@ class Bot(commands.AutoBot):
             client_id=config.cfg["client_id"],
             client_secret=config.cfg["client_secret"],
             bot_id=config.cfg["bot_id"],
-            owner_id=config.cfg["bot_id"], # boilerplate
+            owner_id=config.cfg["bot_id"],  # boilerplate
             prefix=parser.build_prefixes(config.SPECIAL_CHARS),
             subscriptions=subs,
             force_subscribe=True,
@@ -58,27 +60,27 @@ class Bot(commands.AutoBot):
 
     @commands.Component.listener()
     async def event_message(self, payload: twitchio.ChatMessage) -> None:
-        if payload.chatter.id.lower() == self.bot_id.lower():
+        if payload.chatter.id == self.bot_id:
             return
+
         payload.text = re.sub(r"\s+", " ", payload.text).strip()
         print(f"{payload.chatter.name}: {payload.text}")
         words = payload.text.split()
-        # TODO: finish this
+
         if any("ass" in word.lower() for word in words):
             await payload.respond("huh ass")
         if any("yeah" in word.lower() for word in words):
-            for i in range(0, 3):
+            for n in range(3):
                 await payload.respond("yeah")
-                #delay(1000)
-        #if words[0] == "#p":
-            #await payload.respond("#p")
+
         await super().event_message(payload)
+
 
 
     # async def setup_hook(self) -> None: # OOP hell (wtf is this boilerplate) edit: I take it back
     #     await self.add_component(Moderation(self))
     async def setup_hook(self) -> None:
-        component_list = [MainCmds(self), Moderation(self), Markov(self)]
+        component_list = [MainCmds(self), Moderation(self), Markov(self), Farm(self)]
         LOGGER.info("setup_hook is running!")
         for comp in component_list:
             try:
@@ -140,10 +142,13 @@ class MainCmds(commands.Component):
     
 
     @commands.command()
-    async def helpuuh(self, ctx: commands.Context) -> None:
-        await ctx.reply("""
-        uuh [seed, w, r, i, f, c1-75, d0-1, e0-1], bih, checkuuh, brainfiles.
-        admin 0 : ban,, unban [-c], mod [-c, -a, -r], killuuh uuh""")
+    async def helpuuh(self, ctx: commands.Context, *, args: str = "") -> None:
+        if args == "":
+            await ctx.reply("""
+                uuh [seed, w, r, i, f, c1-75, d0-1, e0-1], bih, checkuuh, brainfiles.
+                admin 0 : ban,, unban [-c], mod [-c, -a, -r], killuuh uuh""")
+        #else:
+            #args.split()
     
 
     # ping triggers =================================
@@ -172,7 +177,7 @@ class MainCmds(commands.Component):
     @commands.command()
     async def time(self, ctx: commands.Context) -> None:
         st = config.cfg["start_time"]
-        en = config.cfg["start_time"]
+        en = config.cfg["end_time"]
         now = datetime.now()
         time_str = str(now.hour) + ":" + str(now.minute).zfill(2)
         if is_time_between(time(st[0], st[1]), time(en[0], en[1])):
@@ -180,6 +185,14 @@ class MainCmds(commands.Component):
         else:
             await ctx.reply(f"kuj despair0 VoteNay , time is {time_str}")
     
+
+    @commands.command()
+    async def pstats(self, ctx: commands.Context) -> None:
+        stats = read_potat_stats()
+        await ctx.send(
+            f"bih . . . {stats['harvest_count']} harvests, {stats['total_gained']} total, mean avg last 24h {round(stats['average'], 2)}"
+        )
+
 
     @commands.command()
     async def say(self, ctx: commands.Context, say_str: str) -> None:
@@ -220,7 +233,7 @@ async def get_user_ids(bot: Bot, usernames: list[str]) -> list[str]: # unused
 async def poll_live_status(bot: Bot, channel_logins: list[str], interval: int = 60) -> None:
     while True:
         try:
-            streams = await bot.fetch_streams(user_logins=channel_logins, token_for=bot.bot_id)
+            streams = await bot.fetch_streams(user_logins=channel_logins)
             currently_live = {s.user.name.lower() for s in streams}
             for name in channel_logins:
                 bot.is_live[name.lower()] = name.lower() in currently_live

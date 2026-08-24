@@ -4,6 +4,7 @@ import config
 from config import cfg, save_cfg, LOGGER
 import re, textwrap, os, shutil
 from datetime import datetime
+import json, urllib.request
 
 import markov_lib
 
@@ -14,6 +15,9 @@ markov_bot.load("./brain")
 
 message_buffer: list[str] = []
 time_last_commit = datetime.now()
+
+context_window: list[str] = []
+context_num = 5
 
 
 def save_brain():
@@ -45,10 +49,10 @@ def moderate_spam(text):
     return " ".join(words) or "uuh . . . . . ."
 
 
-def train_from_buffer(train_buffer) -> None:
-    LOGGER.info(f"Committing {len(message_buffer)} chats to markov.")
-    for msg in message_buffer: markov_bot.train(msg, 3)
-    message_buffer.clear()
+def train_from_buffer(train_buffer) -> None: pass
+    # LOGGER.info(f"Committing {len(message_buffer)} chats to markov.")
+    # for msg in message_buffer: markov_bot.train(msg, 3)
+    # message_buffer.clear()
 
 
 def train_guard(message, userid, is_live) -> None: # rename maybe?
@@ -85,6 +89,8 @@ class Markov(commands.Component):
     async def event_message(self, payload: twitchio.ChatMessage) -> None:
         train_guard(payload.text, payload.chatter.id, is_live=False) # this is less bloat (for now)
         # TODO: replace False with real live checking
+        context_window.append(f"{payload.chatter.name}: {payload.text}")
+        if len(context_window) > 100: context_window.pop(0)
 
 
     @commands.command()
@@ -129,3 +135,42 @@ class Markov(commands.Component):
         for m in msgs[1:]:
             await asyncio.sleep(1)
             await ctx.reply(m)
+    
+
+    @commands.command()
+    async def ermugo2(self, ctx: commands.Context, *, args: str = "") -> None:
+        small_context = context_window[-context_num:]
+        context = ""
+        for message in small_context:
+            context += message + "\n"
+        context = context.rstrip("\n") + "\n"
+        context += ("ermugo2:")
+        payload = {
+            "model": "ermugo2:latest",
+            "think": True,
+            "messages": [{"role": "user", "content": f"{context}"}],
+            "stream": False,
+            "options": {
+                "temperature": 0.5,
+                "num_predict": 150
+            }
+        }
+        req = urllib.request.Request("http://localhost:11434/api/chat",
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"})
+        resp = json.loads(urllib.request.urlopen(req).read())
+        content = resp["message"]["content"]
+        await ctx.send(content)
+        #print(context_window)
+    
+
+    @commands.command()
+    async def clearcontext(self, ctx: commands.Context) -> None:
+        await ctx.send("ok clearing")
+        context_window.clear()
+    
+
+    @commands.command()
+    async def context(self, ctx: commands.Context, window: int) -> None:
+        context_num = max(min(window, 30), 0)
+        await ctx.send(f"set context to {context_num}")

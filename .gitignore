@@ -40,3 +40,4 @@ config*.json
 .venv
 *.so
 *.pyc
+potato_log.jsonl
