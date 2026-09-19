@@ -76,6 +76,18 @@ class Bot(commands.AutoBot):
         await super().event_message(payload)
 
 
+    async def poll_live_status(self, channel_logins: list[str]) -> None:
+        while True:
+            try:
+                streams = await self.fetch_streams(user_logins=channel_logins)
+                currently_live = {s.user.name.lower() for s in streams}
+                for name in channel_logins:
+                    self.is_live[name.lower()] = name.lower() in currently_live
+            except Exception as e:
+                LOGGER.warning(f"Error polling stream status: {e}")
+            LOGGER.info(self.is_live)
+            await asyncio.sleep(60)
+
 
     # async def setup_hook(self) -> None: # OOP hell (wtf is this boilerplate) edit: I take it back
     #     await self.add_component(Moderation(self))
@@ -134,6 +146,7 @@ class Bot(commands.AutoBot):
     # stub
     async def event_ready(self) -> None:
         LOGGER.info("Successfully logged in as: %s", self.bot_id)
+        asyncio.create_task(self.poll_live_status(["vedal987"]))
 
 
 class MainCmds(commands.Component):
@@ -184,14 +197,6 @@ class MainCmds(commands.Component):
             await ctx.reply(f"kuh yea, time is {time_str}")
         else:
             await ctx.reply(f"kuj despair0 VoteNay , time is {time_str}")
-    
-
-    @commands.command()
-    async def pstats(self, ctx: commands.Context) -> None:
-        stats = read_potat_stats()
-        await ctx.send(
-            f"bih . . . {stats['harvest_count']} harvests, {stats['total_gained']} total, mean avg last 24h {round(stats['average'], 2)}"
-        )
 
 
     @commands.command()
@@ -230,18 +235,7 @@ async def get_user_ids(bot: Bot, usernames: list[str]) -> list[str]: # unused
     return [user.id for user in users]
 
 
-async def poll_live_status(bot: Bot, channel_logins: list[str], interval: int = 60) -> None:
-    while True:
-        try:
-            streams = await bot.fetch_streams(user_logins=channel_logins)
-            currently_live = {s.user.name.lower() for s in streams}
-            for name in channel_logins:
-                bot.is_live[name.lower()] = name.lower() in currently_live
-        except Exception as e:
-            LOGGER.warning(f"Error polling stream status: {e}")
-        await asyncio.sleep(interval)
-
-
+# TODO: migrate this all to markov.py
 async def handle_irc_message(bot: Bot, channel: str, username: str, message: str) -> None:
     print(f"[IRC #{channel}] {username}: {message}")
     user = await Bot.fetch_user(bot, login=username)
@@ -271,7 +265,6 @@ def main() -> None:
                 await asyncio.gather(
                     bot.start(load_tokens=False),
                     irc_reader.start(),
-                    poll_live_status(bot, ["vedal987"]),
                 )
     
     try:

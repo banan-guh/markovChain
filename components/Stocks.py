@@ -8,17 +8,14 @@ from config import LOGGER
 
 
 
-# shoehorn potat commands, clean up? move to seperate class probably
+STOCKS_LOG = Path("stocks_log.jsonl")
+STOCKS_CONFIG = Path("stocks_config.jsonl")
 
-LOG_PATH = Path("potato_log.jsonl")
+STOCKS_USERS = 0 # placeholder TODO
 
-HARVEST_PATTERN = re.compile(
-    r"\[(?P<sign>[+-])(?P<gained>[\d,]+) ⇒ (?P<total>-?[\d,]+)\]"
-)
+# \/ below this is just potat farm defs with mutated names. just do some shit with it later ig
 
-POTAT_COMMANDS = ["#p", "#potat", "#tater", "#potater", "#papa"]
-
-def parse_harvest(text: str) -> dict | None:
+def parse_stocks(text: str) -> dict | None:
     match = HARVEST_PATTERN.search(text)
     if not match:
         return None
@@ -32,7 +29,7 @@ def parse_harvest(text: str) -> dict | None:
         "total": total,
     }
 
-def log_harvest(harvest: dict, log_path: Path = LOG_PATH) -> None:
+def log_stocks(harvest: dict, log_path: Path = LOG_PATH) -> None:
     entry = {
         "timestamp": datetime.now().isoformat(),
         **harvest,
@@ -41,31 +38,20 @@ def log_harvest(harvest: dict, log_path: Path = LOG_PATH) -> None:
         f.write(json.dumps(entry) + "\n")
 
 
-def read_potat_stats(log_path: Path = LOG_PATH, is_total: bool = False) -> dict:
+def read_potat_stats(log_path: Path = LOG_PATH) -> dict:
     total_gained = 0
     harvest_count = 0
-    day_gained = 0
-    day_harvest_count = 0
 
     with log_path.open("r", encoding="utf-8") as f:
         for line in f:
             entry = json.loads(line)
             date = datetime.fromisoformat(entry["timestamp"])
+            if date < (datetime.now() - timedelta(hours=24)): continue
             total_gained += entry["gained"]
             harvest_count += 1
-            if date < (datetime.now() - timedelta(hours=24)): continue
-            day_gained += entry["gained"]
-            day_harvest_count += 1
 
     average = total_gained / harvest_count if harvest_count else 0
-    day_average = day_gained / day_harvest_count if harvest_count else 0
 
-    if not is_total:
-        return {
-            "total_gained": day_gained,
-            "harvest_count": day_harvest_count,
-            "average": day_average,
-        }
     return {
         "total_gained": total_gained,
         "harvest_count": harvest_count,
@@ -135,18 +121,9 @@ class Farm(commands.Component):
                 print(f"potato_watcher error: {e}")
 
 
-    @commands.command(aliases=["pasta"]) # TODO: add a streak counter for fun
-    async def pstats(self, ctx: commands.Context, *, args: str = "") -> None:
-        import parser
-        parsed = parser.parse_flags(args, ["-t"], [])
-        flags = parsed[1]
-        total = flags["-t"]
-        stats = read_potat_stats(is_total=total)
-        if total:
-            await ctx.send(
-                f"bih . . . {stats['harvest_count']} harvests, {stats['total_gained']} total, mean avg {round(stats['average'], 2)}"
-            )
-        else:
-            await ctx.send(
-                f"bih . . . {stats['harvest_count']} harvests, {stats['total_gained']} total, mean avg last 24h {round(stats['average'], 2)}"
-            )
+    @commands.command()
+    async def pstats(self, ctx: commands.Context) -> None:
+        stats = read_potat_stats()
+        await ctx.send(
+            f"bih . . . {stats['harvest_count']} harvests, {stats['total_gained']} total, mean avg last 24h {round(stats['average'], 2)}"
+        )

@@ -106,7 +106,7 @@ class Moderation(commands.Component):
     @commands.command()
     async def config(self, ctx: commands.Context, *, args: str = "") -> None:
         import parser
-        parsed = parser.parse_flags(args, ["-h", "-train", "-cd", "-d", "-e"])
+        parsed = parser.parse_flags(args, ["-h", "-train", "-cd", "-d", "-e"], [])
         value, flags = parsed[0], parsed[1]
         if sum(flags.values()) > 1:
             await ctx.send(f"uuh Tssk use one flag at a time")

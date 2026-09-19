@@ -66,7 +66,6 @@ class AnonymousIRCReader:
         LOGGER.info("Connecting to Twitch IRC as %s for #%s...", nick, self.channel)
         self._reader, self._writer = await asyncio.open_connection(TWITCH_IRC_HOST, TWITCH_IRC_PORT)
 
-        # Anonymous login: PASS can be anything (even blank-ish), NICK must be justinfanXXXXX
         self._send(f"PASS oauth:anonymous")
         self._send(f"NICK {nick}")
         self._send(f"JOIN #{self.channel}")
@@ -74,7 +73,11 @@ class AnonymousIRCReader:
         LOGGER.info("Joined #%s anonymously (read-only).", self.channel)
 
         while True:
-            line = await self._reader.readline()
+            try:
+                line = await asyncio.wait_for(self._reader.readline(), timeout=300)
+            except asyncio.TimeoutError:
+                raise ConnectionError("No data received from IRC server for 300s, assuming dead connection")
+
             if not line:
                 raise ConnectionError("Connection closed by server")
 
@@ -82,7 +85,6 @@ class AnonymousIRCReader:
             if not decoded:
                 continue
 
-            # Respond to PING to stay alive
             if decoded.startswith("PING"):
                 self._send(decoded.replace("PING", "PONG", 1))
                 continue

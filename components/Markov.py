@@ -49,10 +49,10 @@ def moderate_spam(text):
     return " ".join(words) or "uuh . . . . . ."
 
 
-def train_from_buffer(train_buffer) -> None: pass
-    # LOGGER.info(f"Committing {len(message_buffer)} chats to markov.")
-    # for msg in message_buffer: markov_bot.train(msg, 3)
-    # message_buffer.clear()
+def train_from_buffer(train_buffer) -> None:
+    LOGGER.info(f"Committing {len(message_buffer)} chats to markov.")
+    for msg in message_buffer: markov_bot.train(msg, 3)
+    message_buffer.clear()
 
 
 def train_guard(message, userid, is_live) -> None: # rename maybe?
